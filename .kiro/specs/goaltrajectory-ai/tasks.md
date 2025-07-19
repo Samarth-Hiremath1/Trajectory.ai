@@ -23,7 +23,7 @@
   - Create route protection and redirect logic for new vs returning users
   - _Requirements: 1.3, 1.4, 7.1, 7.2_
 
-- [ ] 4. Implement resume upload and parsing service
+- [x] 4. Implement resume upload and parsing service
   - Create FastAPI endpoint for PDF file upload with validation
   - Integrate pdfplumber library for PDF text extraction
   - Implement text chunking logic for resume content
