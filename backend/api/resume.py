@@ -24,7 +24,7 @@ async def upload_resume(
     user_id: str = Depends(get_current_user_id)
 ):
     """
-    Upload and process a PDF resume file
+    Upload and process a PDF resume file with embedding generation
     
     - **file**: PDF file to upload (max 10MB)
     - Returns: Resume processing status and metadata
@@ -39,49 +39,35 @@ async def upload_resume(
             detail=f"Failed to read uploaded file: {str(e)}"
         )
     
-    # Validate file
-    is_valid, error_message = resume_service.validate_pdf_file(file_content, file.filename)
-    if not is_valid:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_message
-        )
-    
-    # Create resume record
-    resume_id = str(uuid.uuid4())
-    resume = Resume(
-        id=resume_id,
-        user_id=user_id,
-        filename=file.filename,
-        file_path="",  # Will be set after saving
-        file_size=len(file_content),
-        content_type=file.content_type or "application/pdf",
-        processing_status=ProcessingStatus.PROCESSING
-    )
-    
+    # Process resume with embeddings
     try:
-        # Save file to disk
-        file_path = await resume_service.save_uploaded_file(
-            file_content, file.filename, user_id
+        result = await resume_service.process_resume_with_embeddings(
+            user_id, file_content, file.filename
         )
-        resume.file_path = file_path
         
-        # Parse PDF content
-        parse_result = resume_service.parse_pdf_content(file_path)
+        if not result["success"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=result["error"]
+            )
         
-        if parse_result.success:
-            # Update resume with parsed content
-            resume.parsed_content = {
-                "text_content": parse_result.text_content,
-                "metadata": parse_result.metadata
-            }
-            resume.text_chunks = parse_result.chunks
-            resume.processing_status = ProcessingStatus.COMPLETED
-            resume.processed_date = datetime.utcnow()
-        else:
-            # Handle parsing failure
-            resume.processing_status = ProcessingStatus.FAILED
-            resume.error_message = parse_result.error_message
+        # Create resume record
+        resume_id = str(uuid.uuid4())
+        resume = Resume(
+            id=resume_id,
+            user_id=user_id,
+            filename=file.filename,
+            file_path=result["file_path"],
+            file_size=len(file_content),
+            content_type=file.content_type or "application/pdf",
+            parsed_content={
+                "text_content": result["text_content"],
+                "metadata": result["metadata"]
+            },
+            text_chunks=result["chunks"],
+            processing_status=result["processing_status"],
+            processed_date=datetime.utcnow()
+        )
         
         # TODO: Save resume to database (Supabase integration)
         # For now, we'll just return the response
@@ -93,14 +79,12 @@ async def upload_resume(
             upload_date=resume.upload_date,
             processed_date=resume.processed_date,
             error_message=resume.error_message,
-            chunk_count=len(resume.text_chunks) if resume.text_chunks else None
+            chunk_count=result["chunk_count"]
         )
         
+    except HTTPException:
+        raise
     except Exception as e:
-        # Clean up file if processing failed
-        if resume.file_path:
-            resume_service.delete_resume_file(resume.file_path)
-        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to process resume: {str(e)}"
@@ -157,3 +141,69 @@ async def list_user_resumes(
     # TODO: Implement database lookup for user resumes
     # For now, return empty list
     return []
+
+
+@router.post("/search")
+async def search_resume_content(
+    query: str,
+    n_results: int = 5,
+    user_id: str = Depends(get_current_user_id)
+):
+    """
+    Search resume content using semantic similarity
+    
+    - **query**: Search query text
+    - **n_results**: Number of results to return (default: 5)
+    - Returns: List of relevant resume chunks with similarity scores
+    """
+    try:
+        if not query.strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Query cannot be empty"
+            )
+        
+        results = resume_service.search_resume_content(user_id, query, n_results)
+        
+        return {
+            "query": query,
+            "results": results,
+            "total_results": len(results)
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Search failed: {str(e)}"
+        )
+
+
+@router.get("/health")
+async def health_check():
+    """
+    Check the health of the resume processing and embedding services
+    
+    - Returns: Health status of all components
+    """
+    try:
+        # Get embedding service health
+        embedding_health = resume_service.embedding_service.health_check()
+        
+        # Get collection stats
+        collection_stats = resume_service.embedding_service.get_collection_stats("resume_embeddings")
+        
+        return {
+            "status": "healthy" if embedding_health["status"] == "healthy" else "degraded",
+            "embedding_service": embedding_health,
+            "collections": {
+                "resume_embeddings": collection_stats
+            },
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat()
+        }

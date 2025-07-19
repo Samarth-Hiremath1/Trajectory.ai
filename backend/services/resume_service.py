@@ -5,8 +5,12 @@ from typing import List, Dict, Optional, Tuple
 from pathlib import Path
 import re
 from datetime import datetime
+import logging
 
 from models.resume import Resume, ResumeChunk, ResumeParseResult, ProcessingStatus
+from services.embedding_service import EmbeddingService
+
+logger = logging.getLogger(__name__)
 
 
 class ResumeProcessingService:
@@ -19,6 +23,9 @@ class ResumeProcessingService:
         # Text chunking parameters
         self.chunk_size = 500  # characters per chunk
         self.chunk_overlap = 50  # overlap between chunks
+        
+        # Initialize embedding service
+        self.embedding_service = EmbeddingService()
     
     async def save_uploaded_file(self, file_content: bytes, filename: str, user_id: str) -> str:
         """Save uploaded file to disk and return file path"""
@@ -179,4 +186,81 @@ class ResumeProcessingService:
                 return True
             return False
         except Exception:
+            return False
+    
+    async def process_resume_with_embeddings(self, user_id: str, file_content: bytes, filename: str) -> Dict:
+        """Complete resume processing pipeline with embedding generation"""
+        try:
+            logger.info(f"Starting resume processing for user {user_id}")
+            
+            # Validate file
+            is_valid, error_message = self.validate_pdf_file(file_content, filename)
+            if not is_valid:
+                return {
+                    "success": False,
+                    "error": error_message,
+                    "processing_status": ProcessingStatus.FAILED
+                }
+            
+            # Save file
+            file_path = await self.save_uploaded_file(file_content, filename, user_id)
+            
+            # Parse PDF content
+            parse_result = self.parse_pdf_content(file_path)
+            if not parse_result.success:
+                return {
+                    "success": False,
+                    "error": parse_result.error_message,
+                    "processing_status": ProcessingStatus.FAILED
+                }
+            
+            # Generate and store embeddings
+            embedding_success = self.embedding_service.store_resume_embeddings(user_id, parse_result.chunks)
+            if not embedding_success:
+                logger.warning(f"Failed to store embeddings for user {user_id}, but continuing...")
+            
+            logger.info(f"Successfully processed resume for user {user_id}")
+            return {
+                "success": True,
+                "file_path": file_path,
+                "text_content": parse_result.text_content,
+                "chunks": parse_result.chunks,
+                "chunk_count": len(parse_result.chunks),
+                "metadata": parse_result.metadata,
+                "embeddings_stored": embedding_success,
+                "processing_status": ProcessingStatus.COMPLETED
+            }
+            
+        except Exception as e:
+            logger.error(f"Resume processing failed for user {user_id}: {e}")
+            return {
+                "success": False,
+                "error": f"Processing failed: {str(e)}",
+                "processing_status": ProcessingStatus.FAILED
+            }
+    
+    def search_resume_content(self, user_id: str, query: str, n_results: int = 5) -> List[Dict]:
+        """Search user's resume content using semantic similarity"""
+        try:
+            return self.embedding_service.search_resume_embeddings(user_id, query, n_results)
+        except Exception as e:
+            logger.error(f"Resume search failed for user {user_id}: {e}")
+            return []
+    
+    def delete_user_resume_data(self, user_id: str, file_path: Optional[str] = None) -> bool:
+        """Delete all resume data for a user including embeddings"""
+        try:
+            # Delete embeddings from ChromaDB
+            embeddings_deleted = self.embedding_service.delete_user_embeddings(user_id)
+            
+            # Delete file if path provided
+            file_deleted = True
+            if file_path:
+                file_deleted = self.delete_resume_file(file_path)
+            
+            logger.info(f"Deleted resume data for user {user_id}")
+            return embeddings_deleted and file_deleted
+            
+        except Exception as e:
+            logger.error(f"Failed to delete resume data for user {user_id}: {e}")
             return False

@@ -30,7 +30,7 @@
   - Create resume data model and database storage
   - _Requirements: 2.1, 2.4_
 
-- [ ] 5. Set up ChromaDB and embedding generation
+- [x] 5. Set up ChromaDB and embedding generation
   - Configure ChromaDB instance in Docker container
   - Integrate bge-small-en-v1.5 model from Hugging Face for embeddings
   - Create embedding generation service for resume chunks
