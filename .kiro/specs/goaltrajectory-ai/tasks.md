@@ -44,14 +44,14 @@
   - Create rate limiting and queue management for API requests
   - _Requirements: 4.4, 8.1, 8.2_
 
-- [ ] 7. Implement RAG-enabled AI chat service
+- [x] 7. Implement RAG-enabled AI chat service
   - Create LangChain-based chat service with memory management
   - Implement RAG retrieval from ChromaDB for user context
   - Build chat session management with conversation history
   - Create FastAPI endpoints for chat initialization and message handling
   - _Requirements: 3.1, 3.2_
 
-- [ ] 8. Build AI chat frontend interface
+- [x] 8. Build AI chat frontend interface
   - Create chat UI component with message display and input
   - Implement real-time messaging with WebSocket or polling
   - Add typing indicators and message status feedback

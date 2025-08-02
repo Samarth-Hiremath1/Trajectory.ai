@@ -3,6 +3,7 @@
 import { useAuth } from '@/lib/auth-context'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
+import { ChatInterface } from '@/components/chat/ChatInterface'
 
 export default function DashboardPage() {
   const { user, profile, loading, profileLoading, signOut } = useAuth()
@@ -108,17 +109,18 @@ export default function DashboardPage() {
             </div>
           </div>
           
-          <div className="border-4 border-dashed border-gray-200 rounded-lg h-64 flex items-center justify-center">
-            <div className="text-center">
+          {/* AI Chat Interface */}
+          <div className="bg-white rounded-lg shadow">
+            <div className="p-6">
               <h2 className="text-2xl font-bold text-gray-900 mb-4">
-                Welcome to your Career Dashboard
+                AI Career Mentor
               </h2>
-              <p className="text-gray-600 mb-4">
-                This is where your AI chat and roadmap features will be implemented.
+              <p className="text-gray-600 mb-6">
+                Get personalized career advice based on your profile and resume.
               </p>
-              <p className="text-sm text-gray-500">
-                Authentication is working! ✅ Database connection established! ✅
-              </p>
+            </div>
+            <div className="h-96">
+              <ChatInterface />
             </div>
           </div>
         </div>

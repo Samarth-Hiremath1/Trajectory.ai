@@ -2,6 +2,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 import logging
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv('.env')
 
 from api.resume import router as resume_router
 from api.chat import router as chat_router
