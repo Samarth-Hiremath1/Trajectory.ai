@@ -37,7 +37,7 @@
   - Implement ChromaDB collection management for user resume embeddings
   - _Requirements: 2.2, 2.3_
 
-- [ ] 6. Build Hugging Face integration service
+- [x] 6. Build Hugging Face integration service
   - Create service class for Hugging Face Inference API integration
   - Implement Mistral-7B and Gemma model interfaces
   - Add error handling and retry logic for API calls

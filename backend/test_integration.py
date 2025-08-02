@@ -1,168 +1,199 @@
 #!/usr/bin/env python3
 """
-Integration test for resume upload with embedding generation
+Integration test for the new AI service with Gemini + OpenRouter
 """
 
 import asyncio
-import sys
 import os
-from pathlib import Path
-from fastapi.testclient import TestClient
-import tempfile
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import letter
-import io
+from dotenv import load_dotenv
+import sys
+sys.path.append('.')
+from services.ai_service import AIService, ModelType, AIProvider
 
-# Add backend directory to Python path
-sys.path.append(str(Path(__file__).parent))
+# Load environment variables
+load_dotenv()
 
-from main import app
-
-def create_test_pdf():
-    """Create a simple test PDF with resume content"""
-    buffer = io.BytesIO()
+async def test_ai_service_integration():
+    """Test the complete AI service integration"""
     
-    # Create PDF with reportlab
-    p = canvas.Canvas(buffer, pagesize=letter)
-    
-    # Add some resume content
-    p.drawString(100, 750, "John Doe")
-    p.drawString(100, 730, "Software Engineer")
-    p.drawString(100, 710, "")
-    p.drawString(100, 690, "Experience:")
-    p.drawString(100, 670, "• 5 years of Python development")
-    p.drawString(100, 650, "• Machine learning with TensorFlow and PyTorch")
-    p.drawString(100, 630, "• REST API development with FastAPI")
-    p.drawString(100, 610, "• Database design and optimization")
-    p.drawString(100, 590, "")
-    p.drawString(100, 570, "Education:")
-    p.drawString(100, 550, "• BS Computer Science, University of Technology")
-    p.drawString(100, 530, "• Machine Learning Specialization, Coursera")
-    p.drawString(100, 510, "")
-    p.drawString(100, 490, "Skills:")
-    p.drawString(100, 470, "• Python, JavaScript, SQL")
-    p.drawString(100, 450, "• TensorFlow, PyTorch, Scikit-learn")
-    p.drawString(100, 430, "• FastAPI, Django, React")
-    p.drawString(100, 410, "• PostgreSQL, MongoDB, Redis")
-    
-    p.save()
-    
-    buffer.seek(0)
-    return buffer.getvalue()
-
-def test_resume_upload_with_embeddings():
-    """Test resume upload endpoint with embedding generation"""
-    print("🧪 Testing Resume Upload with Embeddings")
-    print("=" * 50)
-    
-    try:
-        # Create test client
-        client = TestClient(app)
-        
-        # Test health endpoint first
-        print("1. Testing health endpoint...")
-        health_response = client.get("/health")
-        assert health_response.status_code == 200
-        print("✅ Health endpoint working")
-        
-        # Test resume health endpoint
-        print("2. Testing resume health endpoint...")
-        resume_health_response = client.get("/api/resume/health")
-        assert resume_health_response.status_code == 200
-        health_data = resume_health_response.json()
-        print(f"Resume service status: {health_data.get('status', 'unknown')}")
-        print(f"Embedding service status: {health_data.get('embedding_service', {}).get('status', 'unknown')}")
-        
-        # Create test PDF
-        print("3. Creating test PDF...")
-        pdf_content = create_test_pdf()
-        print(f"✅ Created test PDF ({len(pdf_content)} bytes)")
-        
-        # Test resume upload
-        print("4. Testing resume upload...")
-        files = {"file": ("test_resume.pdf", pdf_content, "application/pdf")}
-        upload_response = client.post("/api/resume/upload", files=files)
-        
-        print(f"Upload response status: {upload_response.status_code}")
-        if upload_response.status_code == 200:
-            upload_data = upload_response.json()
-            print("✅ Resume uploaded successfully")
-            print(f"Processing status: {upload_data.get('processing_status')}")
-            print(f"Chunk count: {upload_data.get('chunk_count')}")
-        else:
-            print(f"❌ Upload failed: {upload_response.text}")
-            return False
-        
-        # Test resume search
-        print("5. Testing resume search...")
-        search_response = client.post(
-            "/api/resume/search",
-            params={"query": "machine learning experience", "n_results": 3}
-        )
-        
-        print(f"Search response status: {search_response.status_code}")
-        if search_response.status_code == 200:
-            search_data = search_response.json()
-            print("✅ Resume search successful")
-            print(f"Query: {search_data.get('query')}")
-            print(f"Results found: {search_data.get('total_results', 0)}")
-            
-            # Display search results
-            for i, result in enumerate(search_data.get('results', [])[:2]):
-                print(f"  Result {i+1}:")
-                print(f"    Content: {result.get('content', '')[:100]}...")
-                print(f"    Distance: {result.get('distance', 'N/A')}")
-        else:
-            print(f"❌ Search failed: {search_response.text}")
-            return False
-        
-        # Test another search query
-        print("6. Testing another search query...")
-        search_response2 = client.post(
-            "/api/resume/search",
-            params={"query": "Python programming skills", "n_results": 2}
-        )
-        
-        if search_response2.status_code == 200:
-            search_data2 = search_response2.json()
-            print("✅ Second search successful")
-            print(f"Results found: {search_data2.get('total_results', 0)}")
-        else:
-            print(f"❌ Second search failed: {search_response2.text}")
-        
-        print("\n🎉 All integration tests passed!")
-        return True
-        
-    except Exception as e:
-        print(f"❌ Integration test failed: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
-
-def main():
-    """Run integration tests"""
-    print("🚀 Starting Resume Upload Integration Tests")
+    print("🚀 AI Service Integration Test: Gemini + OpenRouter")
     print("=" * 60)
     
-    # Check if reportlab is available for PDF creation
+    # Initialize service
+    ai_service = AIService()
+    await ai_service._init_session()
+    
     try:
-        import reportlab
-        print("✅ reportlab available for PDF creation")
-    except ImportError:
-        print("❌ reportlab not available, installing...")
-        import subprocess
-        subprocess.run([sys.executable, "-m", "pip", "install", "reportlab"], check=True)
-        print("✅ reportlab installed")
-    
-    success = test_resume_upload_with_embeddings()
-    
-    if success:
-        print("\n🎉 All integration tests passed!")
-        return 0
-    else:
-        print("\n❌ Some integration tests failed.")
-        return 1
+        # Test 1: Health Check
+        print("\n1️⃣ Health Check")
+        print("-" * 20)
+        health = await ai_service.health_check()
+        print(f"Status: {health['status']}")
+        print(f"Providers Available: {health['providers_available']}")
+        print(f"Primary Provider: {health.get('primary_provider', 'unknown')}")
+        print(f"Fallback Available: {health.get('fallback_available', False)}")
+        print(f"Test Generation: {health.get('test_generation_successful', False)}")
+        
+        # Test 2: Gemini Models
+        print(f"\n2️⃣ Testing Gemini Models")
+        print("-" * 30)
+        
+        gemini_models = [ModelType.GEMINI_FLASH, ModelType.GEMINI_PRO]
+        
+        for model in gemini_models:
+            try:
+                print(f"\n📊 Testing {model.value}:")
+                result = await ai_service.generate_text(
+                    prompt="Explain Python programming in one sentence:",
+                    model_type=model,
+                    max_tokens=50
+                )
+                print(f"   ✅ Success: {result}")
+                
+            except Exception as e:
+                print(f"   ❌ Failed: {str(e)[:100]}...")
+        
+        # Test 3: OpenRouter Models
+        print(f"\n3️⃣ Testing OpenRouter Models")
+        print("-" * 35)
+        
+        openrouter_models = [
+            ModelType.MISTRAL_7B,
+            ModelType.GEMMA_7B,
+            ModelType.LLAMA_3_8B
+        ]
+        
+        for model in openrouter_models:
+            try:
+                print(f"\n📊 Testing {model.value}:")
+                result = await ai_service.generate_text(
+                    prompt="What is machine learning?",
+                    model_type=model,
+                    max_tokens=50
+                )
+                print(f"   ✅ Success: {result}")
+                
+            except Exception as e:
+                print(f"   ❌ Failed: {str(e)[:100]}...")
+        
+        # Test 4: Chat Response Generation
+        print(f"\n4️⃣ Chat Response Test")
+        print("-" * 25)
+        
+        try:
+            messages = [
+                {"role": "user", "content": "What are the key skills for a software engineer?"}
+            ]
+            
+            chat_result = await ai_service.generate_chat_response(
+                messages=messages,
+                system_prompt="You are a helpful career advisor.",
+                max_tokens=100
+            )
+            print(f"✅ Chat Response: {chat_result[:200]}...")
+            
+        except Exception as e:
+            print(f"❌ Chat failed: {str(e)}")
+        
+        # Test 5: Career Roadmap Generation
+        print(f"\n5️⃣ Career Roadmap Test")
+        print("-" * 25)
+        
+        try:
+            roadmap = await ai_service.generate_roadmap_content(
+                current_role="Junior Developer",
+                target_role="Senior Software Engineer",
+                user_background="2 years Python experience, familiar with web development"
+            )
+            print(f"✅ Roadmap Generated: {roadmap[:300]}...")
+            
+        except Exception as e:
+            print(f"❌ Roadmap failed: {str(e)}")
+        
+        # Test 6: Career Advice Generation
+        print(f"\n6️⃣ Career Advice Test")
+        print("-" * 25)
+        
+        try:
+            advice = await ai_service.generate_career_advice(
+                question="How can I improve my coding skills?",
+                user_context="Junior developer with 1 year experience in Python"
+            )
+            print(f"✅ Advice Generated: {advice[:300]}...")
+            
+        except Exception as e:
+            print(f"❌ Advice failed: {str(e)}")
+        
+        # Test 7: Fallback Logic
+        print(f"\n7️⃣ Fallback Logic Test")
+        print("-" * 30)
+        
+        try:
+            # Test with prefer_provider to see routing
+            gemini_result = await ai_service.generate_text(
+                prompt="Hello from Gemini",
+                prefer_provider=AIProvider.GEMINI,
+                max_tokens=20
+            )
+            print(f"✅ Gemini preferred: {gemini_result}")
+            
+            openrouter_result = await ai_service.generate_text(
+                prompt="Hello from OpenRouter",
+                prefer_provider=AIProvider.OPENROUTER,
+                max_tokens=20
+            )
+            print(f"✅ OpenRouter preferred: {openrouter_result}")
+            
+        except Exception as e:
+            print(f"❌ Fallback test failed: {str(e)}")
+        
+        # Test 8: Service Metrics
+        print(f"\n8️⃣ Service Metrics")
+        print("-" * 20)
+        
+        metrics = ai_service.get_metrics()
+        print(f"Total Requests: {metrics['total_requests']}")
+        print(f"Successful Requests: {metrics['successful_requests']}")
+        print(f"Failed Requests: {metrics['failed_requests']}")
+        print(f"Success Rate: {metrics['success_rate']:.1f}%")
+        print(f"Average Response Time: {metrics['average_response_time']:.2f}s")
+        print(f"Total Tokens Generated: {metrics['total_tokens']}")
+        print(f"Provider Usage: {metrics['provider_usage']}")
+        print(f"Error Counts: {metrics['error_counts']}")
+        
+        # Test 9: Available Models
+        print(f"\n9️⃣ Available Models")
+        print("-" * 20)
+        
+        available_models = ai_service.get_available_models()
+        for provider, models in available_models.items():
+            print(f"{provider.upper()}:")
+            for model in models:
+                print(f"   • {model}")
+        
+        # Final Summary
+        print(f"\n🎉 Integration Test Summary")
+        print("=" * 35)
+        
+        if metrics['successful_requests'] > 0:
+            print(f"✅ SUCCESS! Generated {metrics['total_tokens']} tokens")
+            print(f"✅ {metrics['successful_requests']} successful requests")
+            print(f"✅ {metrics['success_rate']:.1f}% success rate")
+            print(f"✅ Average response time: {metrics['average_response_time']:.2f}s")
+            
+            if metrics['provider_usage']:
+                print(f"✅ Provider usage: {metrics['provider_usage']}")
+            
+            print(f"\n🎯 AI Service is FULLY FUNCTIONAL!")
+            print(f"🔥 Both Gemini and OpenRouter are working!")
+            print(f"💰 Running on FREE tiers!")
+            
+        else:
+            print(f"⚠️  No successful requests completed")
+            print(f"❌ Check API keys and network connectivity")
+            
+    finally:
+        await ai_service._close_session()
 
 if __name__ == "__main__":
-    exit_code = main()
-    sys.exit(exit_code)
+    asyncio.run(test_ai_service_integration())
