@@ -21,8 +21,8 @@ class AIProvider(Enum):
 
 class ModelType(Enum):
     """Supported model types across providers"""
-    # Gemini models
-    GEMINI_FLASH = "gemini-1.5-flash"
+    # Gemini models (using cheapest options)
+    GEMINI_FLASH = "gemini-2.0-flash-exp"  # Latest and most cost-effective
     GEMINI_PRO = "gemini-1.5-pro"
     
     # OpenRouter free models

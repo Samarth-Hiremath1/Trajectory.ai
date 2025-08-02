@@ -58,9 +58,9 @@ async def test_ai_service_integration():
         print("-" * 35)
         
         openrouter_models = [
-            ModelType.MISTRAL_7B,
-            ModelType.GEMMA_7B,
-            ModelType.LLAMA_3_8B
+            ModelType.MISTRAL_7B,  # Only test the working one
+            # ModelType.GEMMA_7B,   # Not available on OpenRouter free tier
+            # ModelType.LLAMA_3_8B  # Not available on OpenRouter free tier
         ]
         
         for model in openrouter_models:

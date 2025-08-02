@@ -4,6 +4,7 @@ import uvicorn
 import logging
 
 from api.resume import router as resume_router
+from api.chat import router as chat_router
 
 # Configure logging
 logging.basicConfig(
@@ -25,6 +26,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(resume_router)
+app.include_router(chat_router)
 
 @app.get("/")
 async def root():
