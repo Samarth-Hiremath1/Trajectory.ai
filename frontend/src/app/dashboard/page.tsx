@@ -2,12 +2,16 @@
 
 import { useAuth } from '@/lib/auth-context'
 import { useRouter } from 'next/navigation'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { ChatInterface } from '@/components/chat/ChatInterface'
+import { RoadmapInterface } from '@/components/roadmap/RoadmapInterface'
+import { DashboardStats } from '@/components/dashboard/DashboardStats'
+import { QuickActions } from '@/components/dashboard/QuickActions'
 
 export default function DashboardPage() {
   const { user, profile, loading, profileLoading, signOut } = useAuth()
   const router = useRouter()
+  const [activeTab, setActiveTab] = useState<'chat' | 'roadmap'>('chat')
 
   useEffect(() => {
     if (!loading && !user) {
@@ -62,65 +66,62 @@ export default function DashboardPage() {
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">User Information</h3>
-              <div className="space-y-2">
-                <p><span className="font-medium">Email:</span> {user.email}</p>
-                <p><span className="font-medium">User ID:</span> {user.id}</p>
-                <p><span className="font-medium">Profile Status:</span> {profile ? 'Profile Created' : 'No Profile Yet'}</p>
-                {profile && (
-                  <>
-                    <p><span className="font-medium">Current Role:</span> {profile.current_role || 'Not specified'}</p>
-                    <p><span className="font-medium">Target Roles:</span> {profile.target_roles.length > 0 ? profile.target_roles.join(', ') : 'Not specified'}</p>
-                  </>
-                )}
-              </div>
-              {profile && (
-                <div className="mt-4">
-                  <button
-                    onClick={() => router.push('/profile/edit')}
-                    className="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded"
-                  >
-                    Edit Profile
-                  </button>
-                </div>
-              )}
-            </div>
+            <DashboardStats user={user} profile={profile} />
             
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">Next Steps</h3>
-              <div className="space-y-3">
-                {!profile ? (
-                  <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
-                    <p className="text-yellow-800">Complete your profile setup to get started!</p>
-                    <button
-                      onClick={() => router.push('/onboarding')}
-                      className="mt-2 bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-1 rounded text-sm"
-                    >
-                      Start Onboarding
-                    </button>
-                  </div>
-                ) : (
-                  <div className="bg-green-50 border border-green-200 rounded p-3">
-                    <p className="text-green-800">Profile complete! Ready for AI features.</p>
-                  </div>
-                )}
-              </div>
-            </div>
+            <QuickActions 
+              profile={profile} 
+              onEditProfile={() => router.push('/profile/edit')}
+              onStartOnboarding={() => router.push('/onboarding')}
+            />
           </div>
           
-          {/* AI Chat Interface */}
+          {/* Main AI Features */}
           <div className="bg-white rounded-lg shadow">
-            <div className="p-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-4">
-                AI Career Mentor
-              </h2>
-              <p className="text-gray-600 mb-6">
-                Get personalized career advice based on your profile and resume.
-              </p>
+            {/* Tab Navigation */}
+            <div className="border-b border-gray-200">
+              <nav className="flex space-x-8 px-6" aria-label="Tabs">
+                <button
+                  data-tab="chat"
+                  onClick={() => setActiveTab('chat')}
+                  className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                    activeTab === 'chat'
+                      ? 'border-indigo-500 text-indigo-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  AI Career Mentor
+                </button>
+                <button
+                  data-tab="roadmap"
+                  onClick={() => setActiveTab('roadmap')}
+                  className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                    activeTab === 'roadmap'
+                      ? 'border-indigo-500 text-indigo-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  Career Roadmap
+                </button>
+              </nav>
             </div>
-            <div className="h-96">
-              <ChatInterface />
+
+            {/* Tab Content */}
+            <div className="p-6">
+              {activeTab === 'chat' ? (
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                    AI Career Mentor
+                  </h2>
+                  <p className="text-gray-600 mb-6">
+                    Get personalized career advice based on your profile and resume.
+                  </p>
+                  <div className="h-96">
+                    <ChatInterface />
+                  </div>
+                </div>
+              ) : (
+                <RoadmapInterface />
+              )}
             </div>
           </div>
         </div>

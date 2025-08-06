@@ -58,21 +58,21 @@
   - Integrate chat service API calls with error handling
   - _Requirements: 3.3, 3.4_
 
-- [ ] 9. Implement roadmap generation service
+- [x] 9. Implement roadmap generation service
   - Create LangChain prompts for career roadmap generation
   - Integrate roadmap.sh resources and learning content scraping
   - Build roadmap data model with phases, skills, and timeline
   - Implement roadmap generation API endpoint with user context
   - _Requirements: 4.1, 4.2, 4.3, 4.5, 4.6_
 
-- [ ] 10. Build roadmap display and interaction frontend
+- [x] 10. Build roadmap display and interaction frontend
   - Create interactive roadmap visualization component
   - Implement phase-based roadmap display with progress tracking
   - Add roadmap editing and customization features
   - Integrate roadmap generation API with loading states
   - _Requirements: 4.3, 4.6_
 
-- [ ] 11. Implement data persistence and user dashboard
+- [x] 11. Implement data persistence and user dashboard
   - Create Supabase database schema for roadmaps and chat sessions
   - Implement save/load functionality for user progress and roadmaps
   - Build main dashboard combining chat and roadmap interfaces
