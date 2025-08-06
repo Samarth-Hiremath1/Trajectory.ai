@@ -1,6 +1,10 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import { ApiErrorBoundary } from '@/components/error/ApiErrorBoundary'
+import { ErrorDisplay } from '@/components/ui/ErrorDisplay'
+import { ResumeUploadLoadingState } from '@/components/ui/LoadingState'
+import { AppError } from '@/lib/error-utils'
 
 interface ResumeUploadFormProps {
   onSubmit: (resumeFile: File | null) => void
@@ -12,7 +16,7 @@ interface ResumeUploadFormProps {
 export default function ResumeUploadForm({ onSubmit, onBack, isSubmitting, existingResumeUrl }: ResumeUploadFormProps) {
   const [dragActive, setDragActive] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [uploadError, setUploadError] = useState<string | null>(null)
+  const [validationError, setValidationError] = useState<AppError | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleDrag = (e: React.DragEvent) => {
@@ -36,17 +40,25 @@ export default function ResumeUploadForm({ onSubmit, onBack, isSubmitting, exist
   }
 
   const handleFileSelect = (file: File) => {
-    setUploadError(null)
+    setValidationError(null)
     
     // Validate file type
     if (file.type !== 'application/pdf') {
-      setUploadError('Please upload a PDF file only')
+      setValidationError({
+        type: 'VALIDATION' as any,
+        message: 'Please upload a PDF file only',
+        retryable: false
+      })
       return
     }
     
     // Validate file size (max 10MB)
     if (file.size > 10 * 1024 * 1024) {
-      setUploadError('File size must be less than 10MB')
+      setValidationError({
+        type: 'VALIDATION' as any,
+        message: 'File size must be less than 10MB',
+        retryable: false
+      })
       return
     }
     
@@ -70,14 +82,18 @@ export default function ResumeUploadForm({ onSubmit, onBack, isSubmitting, exist
 
   const removeFile = () => {
     setSelectedFile(null)
-    setUploadError(null)
+    setValidationError(null)
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <ApiErrorBoundary operation="resume upload">
+      {isSubmitting ? (
+        <ResumeUploadLoadingState />
+      ) : (
+        <form onSubmit={handleSubmit} className="space-y-6">
       <div>
         <h3 className="text-lg font-medium text-gray-900 mb-2">Upload Your Resume</h3>
         <p className="text-sm text-gray-600 mb-4">
@@ -180,19 +196,12 @@ export default function ResumeUploadForm({ onSubmit, onBack, isSubmitting, exist
           </div>
         )}
 
-        {uploadError && (
-          <div className="bg-red-50 border border-red-200 rounded-md p-4">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <p className="text-sm text-red-800">{uploadError}</p>
-              </div>
-            </div>
-          </div>
+        {validationError && (
+          <ErrorDisplay
+            error={validationError}
+            onDismiss={() => setValidationError(null)}
+            variant="inline"
+          />
         )}
       </div>
 
@@ -226,5 +235,7 @@ export default function ResumeUploadForm({ onSubmit, onBack, isSubmitting, exist
         </div>
       </div>
     </form>
+      )}
+    </ApiErrorBoundary>
   )
 }

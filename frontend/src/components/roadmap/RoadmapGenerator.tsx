@@ -2,6 +2,11 @@
 
 import { useState } from 'react'
 import { RoadmapRequest, CareerSuggestion, RoadmapGenerationResponse } from '@/types/roadmap'
+import { ApiErrorBoundary } from '@/components/error/ApiErrorBoundary'
+import { ErrorDisplay } from '@/components/ui/ErrorDisplay'
+import { RoadmapLoadingState } from '@/components/ui/LoadingState'
+import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
+import { useAsyncOperation } from '@/hooks/useAsyncOperation'
 
 interface RoadmapGeneratorProps {
   onRoadmapGenerated: (roadmap: RoadmapGenerationResponse['roadmap']) => void
@@ -24,29 +29,70 @@ export function RoadmapGenerator({
   })
   
   const [suggestions, setSuggestions] = useState<string[]>([])
-  const [isGenerating, setIsGenerating] = useState(false)
-  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false)
   const [focusAreaInput, setFocusAreaInput] = useState('')
   const [constraintInput, setConstraintInput] = useState('')
 
-  const handleGetSuggestions = async () => {
-    if (!formData.current_role.trim()) return
-    
-    setIsLoadingSuggestions(true)
-    try {
+  // Use async operation for getting suggestions
+  const suggestionsOp = useAsyncOperation(
+    async () => {
+      if (!formData.current_role.trim()) return { suggestions: [] }
+
       const response = await fetch(
         `/api/roadmap/suggestions/${encodeURIComponent(formData.current_role)}?user_background=${encodeURIComponent(formData.user_background || '')}`
       )
       
-      if (response.ok) {
-        const data: CareerSuggestion = await response.json()
+      if (!response.ok) {
+        const error = new Error(`Failed to get suggestions: ${response.statusText}`)
+        ;(error as any).status = response.status
+        throw error
+      }
+
+      return response.json()
+    },
+    {
+      onSuccess: (data: CareerSuggestion) => {
         setSuggestions(data.suggestions)
       }
-    } catch (error) {
-      console.error('Error fetching suggestions:', error)
-    } finally {
-      setIsLoadingSuggestions(false)
     }
+  )
+
+  // Use async operation for roadmap generation
+  const generateRoadmapOp = useAsyncOperation(
+    async () => {
+      if (!formData.current_role.trim() || !formData.target_role.trim()) {
+        throw new Error('Please fill in both current and target roles')
+      }
+
+      const response = await fetch('/api/roadmap/generate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData)
+      })
+
+      if (!response.ok) {
+        const error = new Error(`Failed to generate roadmap: ${response.statusText}`)
+        ;(error as any).status = response.status
+        throw error
+      }
+
+      const data = await response.json()
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to generate roadmap')
+      }
+
+      return data
+    },
+    {
+      onSuccess: (data) => {
+        onRoadmapGenerated(data.roadmap)
+      }
+    }
+  )
+
+  const handleGetSuggestions = () => {
+    suggestionsOp.execute()
   }
 
   const handleAddFocusArea = () => {
@@ -83,43 +129,14 @@ export function RoadmapGenerator({
     }))
   }
 
-  const handleGenerateRoadmap = async () => {
-    if (!formData.current_role.trim() || !formData.target_role.trim()) {
-      alert('Please fill in both current and target roles')
-      return
-    }
-
-    setIsGenerating(true)
-    try {
-      const response = await fetch('/api/roadmap/generate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData)
-      })
-
-      if (response.ok) {
-        const data = await response.json()
-        if (data.success) {
-          onRoadmapGenerated(data.roadmap)
-        } else {
-          alert('Failed to generate roadmap. Please try again.')
-        }
-      } else {
-        alert('Error generating roadmap. Please try again.')
-      }
-    } catch (error) {
-      console.error('Error generating roadmap:', error)
-      alert('Error generating roadmap. Please try again.')
-    } finally {
-      setIsGenerating(false)
-    }
+  const handleGenerateRoadmap = () => {
+    generateRoadmapOp.execute()
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-lg p-6">
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">Generate Career Roadmap</h2>
+    <ApiErrorBoundary operation="roadmap generation" onRetry={generateRoadmapOp.retry}>
+      <div className="bg-white rounded-lg shadow-lg p-6">
+        <h2 className="text-2xl font-bold text-gray-900 mb-6">Generate Career Roadmap</h2>
       
       <div className="space-y-6">
         {/* Current Role */}
@@ -151,10 +168,17 @@ export function RoadmapGenerator({
             />
             <button
               onClick={handleGetSuggestions}
-              disabled={!formData.current_role.trim() || isLoadingSuggestions}
+              disabled={!formData.current_role.trim() || suggestionsOp.loading}
               className="px-4 py-2 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400 text-gray-700 rounded-md text-sm font-medium"
             >
-              {isLoadingSuggestions ? 'Loading...' : 'Get Suggestions'}
+              {suggestionsOp.loading ? (
+                <div className="flex items-center">
+                  <LoadingSpinner size="sm" className="mr-1" />
+                  Loading...
+                </div>
+              ) : (
+                'Get Suggestions'
+              )}
             </button>
           </div>
           
@@ -288,24 +312,42 @@ export function RoadmapGenerator({
           </div>
         </div>
 
+        {/* Error Display for Suggestions */}
+        {suggestionsOp.error && (
+          <ErrorDisplay
+            error={suggestionsOp.error}
+            onRetry={suggestionsOp.retry}
+            onDismiss={suggestionsOp.reset}
+            variant="inline"
+          />
+        )}
+
+        {/* Error Display for Roadmap Generation */}
+        {generateRoadmapOp.error && (
+          <ErrorDisplay
+            error={generateRoadmapOp.error}
+            onRetry={generateRoadmapOp.retry}
+            onDismiss={generateRoadmapOp.reset}
+            variant="inline"
+          />
+        )}
+
         {/* Generate Button */}
         <div className="pt-4">
-          <button
-            onClick={handleGenerateRoadmap}
-            disabled={isGenerating || !formData.current_role.trim() || !formData.target_role.trim()}
-            className="w-full px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-md font-medium text-lg"
-          >
-            {isGenerating ? (
-              <div className="flex items-center justify-center">
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-2"></div>
-                Generating Roadmap...
-              </div>
-            ) : (
-              'Generate Career Roadmap'
-            )}
-          </button>
+          {generateRoadmapOp.loading ? (
+            <RoadmapLoadingState progress={generateRoadmapOp.progress} />
+          ) : (
+            <button
+              onClick={handleGenerateRoadmap}
+              disabled={generateRoadmapOp.loading || !formData.current_role.trim() || !formData.target_role.trim()}
+              className="w-full px-6 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-md font-medium text-lg"
+            >
+              Generate Career Roadmap
+            </button>
+          )}
         </div>
       </div>
     </div>
+    </ApiErrorBoundary>
   )
 }

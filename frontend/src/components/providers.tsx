@@ -2,13 +2,16 @@
 
 import { SessionProvider } from "next-auth/react"
 import { AuthProvider } from "@/lib/auth-context"
+import { ErrorBoundary } from "@/components/error/ErrorBoundary"
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <SessionProvider>
-      <AuthProvider>
-        {children}
-      </AuthProvider>
-    </SessionProvider>
+    <ErrorBoundary>
+      <SessionProvider>
+        <AuthProvider>
+          {children}
+        </AuthProvider>
+      </SessionProvider>
+    </ErrorBoundary>
   )
 }
