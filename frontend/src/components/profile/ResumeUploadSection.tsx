@@ -1,16 +1,27 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import { useAuth } from '@/lib/auth-context'
 
-export default function ResumeUploadSection() {
+interface ResumeUploadSectionProps {
+  onUploadSuccess?: () => void
+  onUploadError?: (error: string) => void
+}
+
+export default function ResumeUploadSection({ 
+  onUploadSuccess, 
+  onUploadError 
+}: ResumeUploadSectionProps = {}) {
+  const { user } = useAuth()
   const [dragActive, setDragActive] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
+  const [uploadSuccess, setUploadSuccess] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Mock existing resume URL - in real implementation, this would come from props or context
-  const existingResumeUrl = null // TODO: Get from profile data
+  // TODO: Get existing resume info from profile data
+  const existingResumeUrl = null
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault()
@@ -57,27 +68,61 @@ export default function ResumeUploadSection() {
   }
 
   const handleUpload = async () => {
-    if (!selectedFile) return
+    if (!selectedFile || !user) return
 
     setIsUploading(true)
     setUploadError(null)
+    setUploadSuccess(false)
 
     try {
-      // TODO: Implement actual file upload to Supabase Storage
-      console.log('Uploading resume:', selectedFile.name)
+      // Create FormData for file upload
+      const formData = new FormData()
+      formData.append('file', selectedFile)
+
+      // Upload to backend API
+      const response = await fetch('/api/resume/upload', {
+        method: 'POST',
+        body: formData,
+        headers: {
+          // Don't set Content-Type header - let browser set it with boundary for FormData
+          'Authorization': `Bearer ${user.id}`, // TODO: Replace with proper auth token
+        },
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: 'Upload failed' }))
+        throw new Error(errorData.detail || 'Upload failed')
+      }
+
+      const result = await response.json()
       
-      // Simulate upload delay
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
-      // TODO: Update profile with resume URL
-      // const resumeUrl = await uploadResumeToStorage(selectedFile)
-      // await updateProfile(userId, { resume_url: resumeUrl })
-      
-      alert('Resume uploaded successfully! (This is a placeholder - actual upload will be implemented later)')
+      setUploadSuccess(true)
       setSelectedFile(null)
+      
+      // Reset file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ''
+      }
+
+      // Call success callback if provided
+      if (onUploadSuccess) {
+        onUploadSuccess()
+      }
+
+      // Show success message briefly
+      setTimeout(() => {
+        setUploadSuccess(false)
+      }, 3000)
+
     } catch (error) {
       console.error('Upload error:', error)
-      setUploadError('Failed to upload resume. Please try again.')
+      const errorMessage = error instanceof Error ? error.message : 'Failed to upload resume. Please try again.'
+      setUploadError(errorMessage)
+      
+      // Call error callback if provided
+      if (onUploadError) {
+        onUploadError(errorMessage)
+      }
     } finally {
       setIsUploading(false)
     }
@@ -193,6 +238,23 @@ export default function ResumeUploadSection() {
               >
                 Remove
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {uploadSuccess && (
+        <div className="bg-green-50 border border-green-200 rounded-md p-4">
+          <div className="flex">
+            <div className="flex-shrink-0">
+              <svg className="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+                <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="ml-3">
+              <p className="text-sm text-green-800">
+                Resume uploaded successfully! Your AI context has been updated with the new resume content.
+              </p>
             </div>
           </div>
         </div>

@@ -12,10 +12,16 @@ router = APIRouter(prefix="/api/resume", tags=["resume"])
 # Initialize resume processing service
 resume_service = ResumeProcessingService()
 
-# TODO: Replace with actual user authentication
-async def get_current_user_id() -> str:
-    """Temporary function to get user ID - replace with actual auth"""
-    return "temp_user_123"
+from fastapi import Header
+
+async def get_current_user_id(x_user_id: str = Header(None)) -> str:
+    """Get user ID from request headers"""
+    if not x_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User ID not provided in headers"
+        )
+    return x_user_id
 
 
 @router.post("/upload", response_model=ResumeResponse)

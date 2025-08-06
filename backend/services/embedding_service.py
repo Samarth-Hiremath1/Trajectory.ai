@@ -229,6 +229,129 @@ class EmbeddingService:
             logger.error(f"Failed to get collection stats: {e}")
             return {"name": collection_name, "count": 0, "error": str(e)}
     
+    def store_profile_context(self, user_id: str, profile_text: str) -> bool:
+        """Store user profile context as embeddings for RAG"""
+        try:
+            if not profile_text.strip():
+                logger.warning("Empty profile text provided")
+                return False
+            
+            # Get or create profile context collection
+            collection = self.get_or_create_collection(
+                "profile_context",
+                metadata={"description": "User profile context embeddings for RAG"}
+            )
+            
+            # Delete existing profile context for this user first
+            try:
+                existing_results = collection.get(where={"user_id": user_id})
+                if existing_results['ids']:
+                    collection.delete(ids=existing_results['ids'])
+                    logger.info(f"Deleted existing profile context for user {user_id}")
+            except Exception as e:
+                logger.warning(f"Could not delete existing profile context: {e}")
+            
+            # Generate embedding for profile text
+            embeddings = self.generate_embeddings([profile_text])
+            
+            # Store in ChromaDB
+            profile_id = f"{user_id}_profile_context"
+            metadata = {
+                "user_id": user_id,
+                "content_type": "profile_context",
+                "created_at": datetime.utcnow().isoformat(),
+                "char_count": len(profile_text)
+            }
+            
+            collection.add(
+                embeddings=embeddings,
+                documents=[profile_text],
+                metadatas=[metadata],
+                ids=[profile_id]
+            )
+            
+            logger.info(f"Stored profile context for user {user_id}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Failed to store profile context: {e}")
+            return False
+    
+    def get_user_embedding_stats(self, user_id: str, collection_name: str) -> Dict:
+        """Get embedding statistics for a specific user and collection"""
+        try:
+            collection = self.chroma_client.get_collection(name=collection_name)
+            
+            # Get user's embeddings
+            results = collection.get(where={"user_id": user_id})
+            
+            stats = {
+                "count": len(results['ids']) if results['ids'] else 0,
+                "collection": collection_name
+            }
+            
+            # Get last updated timestamp if available
+            if results['metadatas']:
+                timestamps = []
+                for metadata in results['metadatas']:
+                    if 'created_at' in metadata:
+                        timestamps.append(metadata['created_at'])
+                
+                if timestamps:
+                    stats["last_updated"] = max(timestamps)
+            
+            return stats
+            
+        except Exception as e:
+            logger.error(f"Failed to get user embedding stats: {e}")
+            return {"count": 0, "collection": collection_name, "error": str(e)}
+    
+    def search_user_context(self, user_id: str, query: str, n_results: int = 5) -> List[Dict]:
+        """Search across all user context (resume + profile) for relevant information"""
+        try:
+            all_results = []
+            
+            # Search resume embeddings
+            resume_results = self.search_resume_embeddings(user_id, query, n_results)
+            for result in resume_results:
+                result["source"] = "resume"
+                all_results.append(result)
+            
+            # Search profile context
+            try:
+                collection = self.chroma_client.get_collection(name="profile_context")
+                query_embedding = self.generate_embeddings([query])[0]
+                
+                profile_results = collection.query(
+                    query_embeddings=[query_embedding],
+                    n_results=n_results,
+                    where={"user_id": user_id}
+                )
+                
+                if profile_results['documents'] and profile_results['documents'][0]:
+                    for i, doc in enumerate(profile_results['documents'][0]):
+                        result = {
+                            "content": doc,
+                            "metadata": profile_results['metadatas'][0][i] if profile_results['metadatas'] else {},
+                            "distance": profile_results['distances'][0][i] if profile_results['distances'] else None,
+                            "id": profile_results['ids'][0][i] if profile_results['ids'] else None,
+                            "source": "profile"
+                        }
+                        all_results.append(result)
+                        
+            except Exception as e:
+                logger.warning(f"Could not search profile context: {e}")
+            
+            # Sort by relevance (distance)
+            all_results.sort(key=lambda x: x.get('distance', float('inf')))
+            
+            # Return top n_results
+            return all_results[:n_results]
+            
+        except Exception as e:
+            logger.error(f"Failed to search user context: {e}")
+            return []
+    
     def health_check(self) -> Dict:
         """Check the health of the embedding service"""
         try:

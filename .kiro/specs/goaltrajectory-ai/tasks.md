@@ -79,7 +79,7 @@
   - Add export functionality for roadmaps and career plans
   - _Requirements: 5.1, 5.2, 5.3, 5.4, 7.3_
 
-- [ ] 12. Build profile editing and information management
+- [x] 12. Build profile editing and information management
   - Create profile editing interface with form validation
   - Implement resume re-upload functionality with embedding updates
   - Add profile update API endpoints with data validation

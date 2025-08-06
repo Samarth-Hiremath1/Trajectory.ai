@@ -38,6 +38,8 @@ export default function EditProfilePage() {
     additional_details: ''
   })
   const [isInitialized, setIsInitialized] = useState(false)
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({})
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
 
   useEffect(() => {
     if (!loading && !user) {
@@ -71,10 +73,28 @@ export default function EditProfilePage() {
     }
   }, [user, profile, loading, router, isInitialized])
 
+  // Add beforeunload event listener for unsaved changes warning
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [hasUnsavedChanges])
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
     if (!user) return
+
+    // Validate form before submission
+    if (!validateForm()) {
+      return
+    }
 
     setIsSubmitting(true)
     setError(null)
@@ -95,6 +115,7 @@ export default function EditProfilePage() {
 
       await refreshProfile()
       setSuccess(true)
+      setHasUnsavedChanges(false)
       
       // Redirect to dashboard after successful update
       setTimeout(() => {
@@ -109,6 +130,7 @@ export default function EditProfilePage() {
   }
 
   const handleEducationChange = (field: keyof ProfileFormData['education'], value: string) => {
+    handleFormChange(`education.${field}`, value)
     setFormData(prev => ({
       ...prev,
       education: {
@@ -120,6 +142,7 @@ export default function EditProfilePage() {
 
   const handleTargetRoleAdd = (role: string) => {
     if (role.trim() && !formData.target_roles.includes(role.trim())) {
+      handleFormChange('target_roles', [...formData.target_roles, role.trim()])
       setFormData(prev => ({
         ...prev,
         target_roles: [...prev.target_roles, role.trim()]
@@ -128,13 +151,56 @@ export default function EditProfilePage() {
   }
 
   const handleTargetRoleRemove = (roleToRemove: string) => {
+    const newRoles = formData.target_roles.filter(role => role !== roleToRemove)
+    handleFormChange('target_roles', newRoles)
     setFormData(prev => ({
       ...prev,
-      target_roles: prev.target_roles.filter(role => role !== roleToRemove)
+      target_roles: newRoles
     }))
   }
 
   const [newTargetRole, setNewTargetRole] = useState('')
+
+  // Validation functions
+  const validateForm = (): boolean => {
+    const errors: Record<string, string> = {}
+
+    // Validate graduation year if provided
+    if (formData.education.graduationYear) {
+      const year = parseInt(formData.education.graduationYear)
+      const currentYear = new Date().getFullYear()
+      if (isNaN(year) || year < 1950 || year > currentYear + 10) {
+        errors.graduationYear = 'Please enter a valid graduation year between 1950 and ' + (currentYear + 10)
+      }
+    }
+
+    // Validate target roles
+    if (formData.target_roles.length === 0) {
+      errors.target_roles = 'Please add at least one target role'
+    }
+
+    // Validate required fields
+    if (!formData.current_role.trim()) {
+      errors.current_role = 'Current role is required'
+    }
+
+    if (!formData.career_background.trim()) {
+      errors.career_background = 'Career background is required'
+    }
+
+    setValidationErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
+  // Track changes
+  const handleFormChange = (field: string, value: any) => {
+    setHasUnsavedChanges(true)
+    setValidationErrors(prev => {
+      const newErrors = { ...prev }
+      delete newErrors[field] // Clear error for this field when user starts typing
+      return newErrors
+    })
+  }
 
   if (loading || profileLoading) {
     return (
@@ -250,46 +316,67 @@ export default function EditProfilePage() {
                       id="graduationYear"
                       value={formData.education.graduationYear}
                       onChange={(e) => handleEducationChange('graduationYear', e.target.value)}
-                      className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                      className={`mt-1 block w-full rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm ${
+                        validationErrors.graduationYear ? 'border-red-300' : 'border-gray-300'
+                      }`}
                       placeholder="e.g., 2023"
                       min="1950"
                       max={new Date().getFullYear() + 10}
                     />
+                    {validationErrors.graduationYear && (
+                      <p className="mt-1 text-sm text-red-600">{validationErrors.graduationYear}</p>
+                    )}
                   </div>
                 </div>
               </div>
 
               <div>
                 <label htmlFor="career_background" className="block text-sm font-medium text-gray-700">
-                  Career Background
+                  Career Background <span className="text-red-500">*</span>
                 </label>
                 <textarea
                   id="career_background"
                   rows={4}
                   value={formData.career_background}
-                  onChange={(e) => setFormData(prev => ({ ...prev, career_background: e.target.value }))}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                  onChange={(e) => {
+                    handleFormChange('career_background', e.target.value)
+                    setFormData(prev => ({ ...prev, career_background: e.target.value }))
+                  }}
+                  className={`mt-1 block w-full rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm ${
+                    validationErrors.career_background ? 'border-red-300' : 'border-gray-300'
+                  }`}
                   placeholder="Tell us about your work experience, internships, projects, and any relevant background..."
                 />
+                {validationErrors.career_background && (
+                  <p className="mt-1 text-sm text-red-600">{validationErrors.career_background}</p>
+                )}
               </div>
 
               <div>
                 <label htmlFor="current_role" className="block text-sm font-medium text-gray-700">
-                  Current Role
+                  Current Role <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
                   id="current_role"
                   value={formData.current_role}
-                  onChange={(e) => setFormData(prev => ({ ...prev, current_role: e.target.value }))}
-                  className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                  onChange={(e) => {
+                    handleFormChange('current_role', e.target.value)
+                    setFormData(prev => ({ ...prev, current_role: e.target.value }))
+                  }}
+                  className={`mt-1 block w-full rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm ${
+                    validationErrors.current_role ? 'border-red-300' : 'border-gray-300'
+                  }`}
                   placeholder="e.g., Software Engineer, Student, Product Manager"
                 />
+                {validationErrors.current_role && (
+                  <p className="mt-1 text-sm text-red-600">{validationErrors.current_role}</p>
+                )}
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700">
-                  Target Roles
+                  Target Roles <span className="text-red-500">*</span>
                 </label>
                 <div className="mt-1">
                   <div className="flex flex-wrap gap-2 mb-2">
@@ -324,7 +411,9 @@ export default function EditProfilePage() {
                           setNewTargetRole('')
                         }
                       }}
-                      className="flex-1 border-gray-300 rounded-l-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                      className={`flex-1 rounded-l-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm ${
+                        validationErrors.target_roles ? 'border-red-300' : 'border-gray-300'
+                      }`}
                       placeholder="e.g., Software Engineer at FAANG, Product Manager at Meta"
                     />
                     <button
@@ -338,6 +427,9 @@ export default function EditProfilePage() {
                       Add
                     </button>
                   </div>
+                  {validationErrors.target_roles && (
+                    <p className="mt-1 text-sm text-red-600">{validationErrors.target_roles}</p>
+                  )}
                 </div>
               </div>
 
@@ -349,7 +441,10 @@ export default function EditProfilePage() {
                   id="additional_details"
                   rows={3}
                   value={formData.additional_details}
-                  onChange={(e) => setFormData(prev => ({ ...prev, additional_details: e.target.value }))}
+                  onChange={(e) => {
+                    handleFormChange('additional_details', e.target.value)
+                    setFormData(prev => ({ ...prev, additional_details: e.target.value }))
+                  }}
                   className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
                   placeholder="Any additional information that might help us provide better career guidance..."
                 />
@@ -360,7 +455,17 @@ export default function EditProfilePage() {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Resume
                 </label>
-                <ResumeUploadSection />
+                <ResumeUploadSection 
+                  onUploadSuccess={() => {
+                    // Refresh profile context after resume upload
+                    refreshProfile()
+                    setSuccess(true)
+                    setTimeout(() => setSuccess(false), 3000)
+                  }}
+                  onUploadError={(error) => {
+                    setError(`Resume upload failed: ${error}`)
+                  }}
+                />
               </div>
 
               <div className="flex justify-end space-x-3">

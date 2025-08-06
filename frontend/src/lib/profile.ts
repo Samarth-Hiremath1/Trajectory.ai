@@ -65,17 +65,25 @@ export async function createProfile(userId: string, profileData: ProfileData): P
 }
 
 export async function updateProfile(userId: string, profileData: Partial<ProfileData>): Promise<Profile | null> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .update(profileData)
-    .eq('user_id', userId)
-    .select()
-    .single()
+  try {
+    const response = await fetch('/api/profile', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(profileData),
+    })
 
-  if (error) {
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Update failed' }))
+      throw new Error(errorData.error || 'Failed to update profile')
+    }
+
+    const result = await response.json()
+    return result
+
+  } catch (error) {
     console.error('Error updating profile:', error)
-    return null
+    throw error
   }
-
-  return data
 }

@@ -316,3 +316,77 @@ class DatabaseService:
             return bool(result.data)
         except:
             return False
+    
+    # Profile operations
+    async def get_profile(self, user_id: str) -> Optional[Dict[str, Any]]:
+        """Get user profile by user ID"""
+        try:
+            result = self.supabase.table("profiles").select("*").eq("user_id", user_id).execute()
+            
+            if result.data:
+                return result.data[0]
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error getting profile for user {user_id}: {str(e)}")
+            raise
+    
+    async def create_profile(self, user_id: str, profile_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Create a new user profile"""
+        try:
+            # Add user_id and timestamps
+            insert_data = {
+                "user_id": user_id,
+                **profile_data,
+                "created_at": datetime.utcnow().isoformat(),
+                "updated_at": datetime.utcnow().isoformat()
+            }
+            
+            result = self.supabase.table("profiles").insert(insert_data).execute()
+            
+            if result.data:
+                logger.info(f"Created profile for user {user_id}")
+                return result.data[0]
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error creating profile for user {user_id}: {str(e)}")
+            raise
+    
+    async def update_profile(self, user_id: str, profile_data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Update user profile"""
+        try:
+            # Add updated timestamp
+            update_data = {
+                **profile_data,
+                "updated_at": datetime.utcnow().isoformat()
+            }
+            
+            result = self.supabase.table("profiles").update(update_data).eq("user_id", user_id).execute()
+            
+            if result.data:
+                logger.info(f"Updated profile for user {user_id}")
+                return result.data[0]
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error updating profile for user {user_id}: {str(e)}")
+            raise
+    
+    async def delete_profile(self, user_id: str) -> bool:
+        """Delete user profile"""
+        try:
+            result = self.supabase.table("profiles").delete().eq("user_id", user_id).execute()
+            
+            if result.data:
+                logger.info(f"Deleted profile for user {user_id}")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error deleting profile for user {user_id}: {str(e)}")
+            raise
