@@ -9,6 +9,7 @@ load_dotenv('.env')
 
 from api.resume import router as resume_router
 from api.chat import router as chat_router
+from api.roadmap import router as roadmap_router
 
 # Configure logging
 logging.basicConfig(
@@ -31,6 +32,7 @@ app.add_middleware(
 # Include routers
 app.include_router(resume_router)
 app.include_router(chat_router)
+app.include_router(roadmap_router)
 
 @app.get("/")
 async def root():

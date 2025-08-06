@@ -253,3 +253,15 @@ class EmbeddingService:
                 "chromadb_connected": False,
                 "embedding_model_loaded": False
             }
+
+# Singleton instance
+_embedding_service_instance = None
+
+def get_embedding_service() -> EmbeddingService:
+    """Get or create singleton embedding service instance"""
+    global _embedding_service_instance
+    
+    if _embedding_service_instance is None:
+        _embedding_service_instance = EmbeddingService()
+    
+    return _embedding_service_instance

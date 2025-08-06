@@ -17,8 +17,22 @@ from models.chat import (
     ChatInitRequest, ChatMessageRequest, ChatResponse
 )
 from services.ai_service import AIService, get_ai_service, ModelType
-from services.embedding_service import EmbeddingService
-from services.resume_service import ResumeProcessingService
+from services.database_service import DatabaseService
+
+# Optional imports with graceful fallback
+try:
+    from services.embedding_service import EmbeddingService
+    EMBEDDING_AVAILABLE = True
+except ImportError:
+    EmbeddingService = None
+    EMBEDDING_AVAILABLE = False
+
+try:
+    from services.resume_service import ResumeProcessingService
+    RESUME_AVAILABLE = True
+except ImportError:
+    ResumeProcessingService = None
+    RESUME_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +41,13 @@ class RAGChatService:
     
     def __init__(self):
         self.ai_service: Optional[AIService] = None
-        self.embedding_service = EmbeddingService()
-        self.resume_service = ResumeProcessingService()
+        self.db_service = DatabaseService()
         
-        # In-memory session storage (in production, use database)
+        # Initialize optional services
+        self.embedding_service = EmbeddingService() if EMBEDDING_AVAILABLE else None
+        self.resume_service = ResumeProcessingService() if RESUME_AVAILABLE else None
+        
+        # In-memory session storage for active sessions
         self.active_sessions: Dict[str, ChatSession] = {}
         self.session_memories: Dict[str, ConversationBufferWindowMemory] = {}
         
@@ -39,7 +56,7 @@ class RAGChatService:
         self.max_context_chunks = 5    # Max RAG context chunks to include
         self.context_similarity_threshold = 0.7  # Minimum similarity for context inclusion
         
-        logger.info("RAG Chat Service initialized")
+        logger.info(f"RAG Chat Service initialized (Embedding: {EMBEDDING_AVAILABLE}, Resume: {RESUME_AVAILABLE})")
     
     async def _get_ai_service(self) -> AIService:
         """Get or initialize AI service"""
@@ -81,6 +98,10 @@ class RAGChatService:
     async def _get_user_context(self, user_id: str, query: str) -> Tuple[List[Dict], str]:
         """Retrieve relevant user context using RAG"""
         try:
+            # Only try to get context if resume service is available
+            if not self.resume_service:
+                return [], "No user background information available."
+            
             # Search resume embeddings for relevant context
             context_chunks = self.resume_service.search_resume_content(
                 user_id=user_id,
@@ -247,6 +268,9 @@ If user background information is available, use it to tailor your responses. If
             # Calculate processing time
             processing_time = (datetime.utcnow() - start_time).total_seconds()
             
+            # Persist session to database
+            await self.persist_session_after_message(request.session_id)
+            
             logger.info(f"Generated response for session {request.session_id} in {processing_time:.2f}s")
             
             return ChatResponse(
@@ -380,8 +404,13 @@ If user background information is available, use it to tailor your responses. If
             ai_service = await self._get_ai_service()
             ai_health = await ai_service.health_check()
             
-            # Check embedding service
-            embedding_health = self.embedding_service.health_check()
+            # Check embedding service if available
+            embedding_health = {"status": "not_available"}
+            if self.embedding_service:
+                try:
+                    embedding_health = self.embedding_service.health_check()
+                except Exception as e:
+                    embedding_health = {"status": "error", "error": str(e)}
             
             return {
                 "status": "healthy",
@@ -389,7 +418,9 @@ If user background information is available, use it to tailor your responses. If
                 "total_sessions": len(self.active_sessions),
                 "memory_sessions": len(self.session_memories),
                 "ai_service_status": ai_health.get("status", "unknown"),
-                "embedding_service_status": embedding_health.get("status", "unknown"),
+                "embedding_service_status": embedding_health.get("status", "not_available"),
+                "embedding_available": EMBEDDING_AVAILABLE,
+                "resume_available": RESUME_AVAILABLE,
                 "components": {
                     "ai_service": ai_health,
                     "embedding_service": embedding_health
@@ -404,6 +435,46 @@ If user background information is available, use it to tailor your responses. If
                 "active_sessions": len([s for s in self.active_sessions.values() if s.is_active]),
                 "total_sessions": len(self.active_sessions)
             }
+    
+    # Database persistence methods
+    async def save_chat_session(self, session: ChatSession) -> str:
+        """Save chat session to database"""
+        session_id = await self.db_service.save_chat_session(session)
+        # Keep in active sessions if it's active
+        if session.is_active:
+            self.active_sessions[session_id] = session
+        return session_id
+    
+    async def load_chat_session(self, session_id: str) -> Optional[ChatSession]:
+        """Load chat session from database"""
+        # Check active sessions first
+        if session_id in self.active_sessions:
+            return self.active_sessions[session_id]
+        
+        # Load from database
+        session = await self.db_service.load_chat_session(session_id)
+        if session and session.is_active:
+            # Load into active sessions and create memory
+            self.active_sessions[session_id] = session
+            self._load_session_into_memory(session)
+        
+        return session
+    
+    async def load_user_chat_sessions(self, user_id: str, active_only: bool = True) -> List[ChatSession]:
+        """Load all chat sessions for a user from database"""
+        return await self.db_service.load_user_chat_sessions(user_id, active_only)
+    
+    async def persist_session_after_message(self, session_id: str) -> bool:
+        """Save session to database after adding a message"""
+        try:
+            if session_id in self.active_sessions:
+                session = self.active_sessions[session_id]
+                await self.save_chat_session(session)
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Failed to persist session {session_id}: {e}")
+            return False
 
 # Singleton instance for global use
 _chat_service_instance = None

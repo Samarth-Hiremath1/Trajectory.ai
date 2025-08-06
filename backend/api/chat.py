@@ -25,6 +25,10 @@ async def initialize_chat_session(
     try:
         logger.info(f"Initializing chat session for user {request.user_id}")
         session = await chat_service.initialize_chat_session(request)
+        
+        # Save session to database
+        await chat_service.save_chat_session(session)
+        
         return session
         
     except Exception as e:
@@ -73,7 +77,8 @@ async def get_chat_session(
 ):
     """Get a specific chat session"""
     try:
-        session = chat_service.get_chat_session(session_id)
+        # Try to load from database first
+        session = await chat_service.load_chat_session(session_id)
         if not session:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -94,11 +99,13 @@ async def get_chat_session(
 @router.get("/users/{user_id}/sessions", response_model=List[ChatSession])
 async def get_user_chat_sessions(
     user_id: str,
+    active_only: bool = True,
     chat_service: RAGChatService = Depends(get_chat_service_dependency)
 ):
     """Get all chat sessions for a user"""
     try:
-        sessions = chat_service.get_user_sessions(user_id)
+        # Load from database
+        sessions = await chat_service.load_user_chat_sessions(user_id, active_only)
         return sessions
         
     except Exception as e:
