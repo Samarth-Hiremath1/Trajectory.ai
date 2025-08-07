@@ -127,7 +127,8 @@ async def generate_roadmap(
                         "model_used": result.model_used,
                         "generation_time_seconds": result.generation_time_seconds,
                         "user_context_used": bool(user_context)
-                    }
+                    },
+                    "strengths_analysis": result.strengths_analysis
                 }
             }
             

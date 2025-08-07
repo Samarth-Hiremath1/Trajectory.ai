@@ -19,16 +19,55 @@ export class ErrorBoundary extends Component<Props, State> {
     this.state = { hasError: false }
   }
 
-  static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error }
+  static getDerivedStateFromError(error: any): State {
+    // Normalize the error to ensure it's an Error instance
+    let normalizedError: Error
+    
+    try {
+      if (error instanceof Error) {
+        normalizedError = error
+      } else if (typeof error === 'string') {
+        normalizedError = new Error(error)
+      } else if (error && typeof error === 'object') {
+        normalizedError = new Error(JSON.stringify(error))
+      } else {
+        normalizedError = new Error('An unknown error occurred')
+      }
+    } catch (e) {
+      normalizedError = new Error('An error occurred that could not be processed')
+    }
+    
+    return { hasError: true, error: normalizedError }
   }
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('ErrorBoundary caught an error:', error, errorInfo)
+    // Handle different types of errors more robustly
+    let errorMessage = 'An unexpected error occurred'
+    let errorDetails = error
+    
+    try {
+      if (error instanceof Error) {
+        errorMessage = error.message
+      } else if (typeof error === 'string') {
+        errorMessage = error
+      } else if (error && typeof error === 'object') {
+        errorMessage = JSON.stringify(error)
+        errorDetails = new Error(errorMessage)
+      }
+    } catch (e) {
+      errorMessage = 'An error occurred that could not be serialized'
+      errorDetails = new Error(errorMessage)
+    }
+    
+    console.error('ErrorBoundary caught an error:', {
+      error: errorDetails,
+      errorInfo,
+      originalError: error
+    })
     
     // Call optional error handler
     if (this.props.onError) {
-      this.props.onError(error, errorInfo)
+      this.props.onError(errorDetails, errorInfo)
     }
   }
 

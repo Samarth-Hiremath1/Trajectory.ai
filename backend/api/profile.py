@@ -143,6 +143,8 @@ async def update_profile(
         # This will refresh the user's context for AI chat and roadmap generation
         try:
             await _refresh_user_rag_context(user_id)
+            # Also refresh chat service context
+            await _refresh_chat_service_context(user_id)
         except Exception as e:
             # Log the error but don't fail the profile update
             print(f"Warning: Failed to refresh RAG context for user {user_id}: {e}")
@@ -231,6 +233,24 @@ async def _refresh_user_rag_context(user_id: str):
     except Exception as e:
         print(f"Error refreshing RAG context for user {user_id}: {e}")
         raise
+
+
+async def _refresh_chat_service_context(user_id: str):
+    """
+    Internal function to refresh chat service RAG context
+    This notifies the chat service to update its context for the user
+    """
+    try:
+        # Import here to avoid circular imports
+        from services.chat_service import get_chat_service
+        
+        # Get chat service and refresh context
+        chat_service = await get_chat_service()
+        await chat_service.refresh_user_context(user_id)
+        
+    except Exception as e:
+        print(f"Error refreshing chat service context for user {user_id}: {e}")
+        # Don't raise here as this is a background operation
 
 
 @router.delete("/{user_id}")

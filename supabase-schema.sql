@@ -2,7 +2,7 @@
 -- Updated to work with NextAuth instead of Supabase auth
 CREATE TABLE IF NOT EXISTS profiles (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID NOT NULL,
+  user_id TEXT NOT NULL,
   education JSONB DEFAULT '{}',
   career_background TEXT,
   "current_role" TEXT,
@@ -34,7 +34,7 @@ CREATE TRIGGER update_profiles_updated_at
 -- Create roadmaps table for career roadmap data
 CREATE TABLE IF NOT EXISTS roadmaps (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID NOT NULL,
+  user_id TEXT NOT NULL,
   title TEXT NOT NULL,
   description TEXT,
   "current_role" TEXT NOT NULL,
@@ -60,7 +60,7 @@ CREATE INDEX IF NOT EXISTS roadmaps_created_date_idx ON roadmaps(created_date);
 -- Create chat_sessions table for AI chat conversations
 CREATE TABLE IF NOT EXISTS chat_sessions (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID NOT NULL,
+  user_id TEXT NOT NULL,
   title TEXT,
   messages JSONB DEFAULT '[]',
   context_version TEXT DEFAULT '1.0',

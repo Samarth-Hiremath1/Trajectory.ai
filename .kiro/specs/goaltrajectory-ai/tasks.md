@@ -86,21 +86,21 @@
   - Integrate profile changes with RAG context updates
   - _Requirements: 7.4, 7.5_
 
-- [ ] 13. Implement daily dashboard and progress tracking
+- [x] 13. Implement daily dashboard and progress tracking
   - Create calendar component for career development activities
   - Build to-do list functionality based on roadmap phases
   - Implement note-taking feature integrated with career plans
   - Add progress tracking and milestone completion features
   - _Requirements: 6.1, 6.2, 6.3, 6.4_
 
-- [ ] 14. Add comprehensive error handling and user feedback
+- [x] 14. Add comprehensive error handling and user feedback
   - Implement error boundaries and fallback UI components
   - Create user-friendly error messages for all failure scenarios
   - Add loading states and progress indicators for long operations
   - Implement retry mechanisms for failed API calls
   - _Requirements: 2.4, 3.1, 4.4_
 
-- [ ] 15. Create automated testing suite
+- [x] 15. Create automated testing suite
   - Write unit tests for all React components using Jest and React Testing Library
   - Create integration tests for FastAPI endpoints using pytest
   - Implement end-to-end tests for complete user flows using Cypress
@@ -121,9 +121,70 @@
   - Optimize frontend bundle size and implement code splitting
   - _Requirements: 8.4, 8.5_
 
-- [ ] 18. Integrate security measures and data protection
+- [x] 18. Fix AI mentor chat RAG integration
+  - Update AI chat service to automatically retrieve user context from resume and profile
+  - Implement proper RAG retrieval that prevents asking users to re-share existing information
+  - Add error handling for RAG failures with graceful degradation
+  - Test chat responses to ensure personalized feedback based on user data
+  - _Requirements: 8.1, 8.2, 8.3, 8.4_
+
+- [ ] 19. Restructure dashboard layout and navigation
+  - Remove Activity Summary section from main dashboard
+  - Create separate Daily Dashboard tab with calendar, to-do lists, and notes
+  - Update main navigation to include Daily Dashboard as separate tab
+  - Ensure data persistence across dashboard views
+  - _Requirements: 9.1, 9.2, 9.3, 9.4_
+
+- [ ] 20. Enhance career to-do list with meaningful empty states
+  - Update to-do list component to detect when user has no roadmaps
+  - Implement encouraging message for first-time users to generate roadmaps
+  - Add options for manual task creation when no roadmaps exist
+  - Ensure automatic task generation from existing roadmaps continues to work
+  - _Requirements: 10.1, 10.2, 10.3, 10.4_
+
+- [ ] 21. Create dedicated AI Mentor tab
+  - Move AI mentor chat to separate tab in main navigation
+  - Implement full chat interface with conversation history preservation
+  - Ensure chat session state persists when switching between tabs
+  - Add proper loading states and error handling for chat functionality
+  - _Requirements: 11.1, 11.2, 11.3, 11.4_
+
+- [ ] 22. Implement roadmap history and management interface
+  - Create sidebar component displaying all user roadmaps with titles
+  - Implement main roadmap display area that updates based on sidebar selection
+  - Add chronological organization of roadmaps with clear identification
+  - Create appropriate empty state for users with no previous roadmaps
+  - Update roadmap data model to include display titles
+  - _Requirements: 12.1, 12.2, 12.3, 12.4_
+
+- [ ] 23. Build roadmap-specific chat functionality
+  - Create roadmap chat service with context-aware responses
+  - Implement chat interface embedded within roadmap view
+  - Add functionality for processing roadmap edit requests from chat
+  - Create roadmap context retrieval and embedding system
+  - Ensure chat responses are specific to the selected roadmap
+  - _Requirements: 13.1, 13.2, 13.3, 13.4_
+
+- [ ] 24. Add name field to user profile and update personalization
+  - Update user profile data model and database schema to include required name field
+  - Add name input field to profile creation form with proper validation
+  - Update ProfileSetupForm component to collect and validate user name
+  - Replace email display in header with personalized "Welcome, [Name]" message
+  - Update all system references (like Career Transition Analysis) to use actual user name instead of placeholders
+  - Ensure name is properly stored and retrieved across all user interactions
+  - _Requirements: 14.1, 14.2, 14.3, 14.4_
+
+- [ ] 25. Create task management system for enhanced to-do functionality
+  - Implement Task data model with roadmap association and manual task support
+  - Create task creation, update, and completion functionality
+  - Build task management API endpoints with proper validation
+  - Integrate task system with existing roadmap-generated tasks
+  - Add task persistence and user-specific task retrieval
+  - _Requirements: 10.2, 10.3_
+
+- [ ] 26. Integrate security measures and data protection
   - Implement Supabase Row Level Security policies
   - Add input validation and sanitization for all user inputs
   - Configure CORS and API rate limiting
   - Implement secure file upload with virus scanning
-  - _Requirements: 1.1, 2.1, 8.1_
+  - _Requirements: 1.1, 2.1, 15.1_

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends, status
 from typing import List, Optional
+from datetime import datetime
 import logging
 
 from models.chat import (
@@ -214,6 +215,35 @@ async def get_session_stats(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get session stats: {str(e)}"
+        )
+
+@router.post("/users/{user_id}/refresh-context")
+async def refresh_user_context(
+    user_id: str,
+    chat_service: RAGChatService = Depends(get_chat_service_dependency)
+):
+    """Refresh user's RAG context after profile or resume updates"""
+    try:
+        success = await chat_service.refresh_user_context(user_id)
+        
+        if success:
+            return {
+                "success": True,
+                "message": f"RAG context refreshed successfully for user {user_id}",
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        else:
+            return {
+                "success": False,
+                "message": f"Failed to refresh RAG context for user {user_id}",
+                "timestamp": datetime.utcnow().isoformat()
+            }
+        
+    except Exception as e:
+        logger.error(f"Failed to refresh user context: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to refresh user context: {str(e)}"
         )
 
 @router.get("/health")

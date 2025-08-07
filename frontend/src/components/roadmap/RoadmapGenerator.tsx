@@ -9,7 +9,7 @@ import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { useAsyncOperation } from '@/hooks/useAsyncOperation'
 
 interface RoadmapGeneratorProps {
-  onRoadmapGenerated: (roadmap: RoadmapGenerationResponse['roadmap']) => void
+  onRoadmapGenerated: (response: RoadmapGenerationResponse) => void
   currentRole?: string
   targetRoles?: string[]
 }
@@ -86,7 +86,7 @@ export function RoadmapGenerator({
     },
     {
       onSuccess: (data) => {
-        onRoadmapGenerated(data.roadmap)
+        onRoadmapGenerated(data)
       }
     }
   )

@@ -71,6 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setProfile(userProfile)
       } catch (error) {
         console.error('Error in refreshProfile:', error)
+        // Ensure we don't throw the error up to the error boundary
         setProfile(null)
       } finally {
         setProfileLoading(false)

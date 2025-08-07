@@ -219,6 +219,13 @@ class ResumeProcessingService:
             if not embedding_success:
                 logger.warning(f"Failed to store embeddings for user {user_id}, but continuing...")
             
+            # Refresh chat service context after successful resume processing
+            try:
+                await self._refresh_chat_service_context(user_id)
+            except Exception as context_error:
+                logger.warning(f"Failed to refresh chat context for user {user_id}: {context_error}")
+                # Don't fail the resume processing for this
+            
             logger.info(f"Successfully processed resume for user {user_id}")
             return {
                 "success": True,
@@ -264,3 +271,21 @@ class ResumeProcessingService:
         except Exception as e:
             logger.error(f"Failed to delete resume data for user {user_id}: {e}")
             return False
+    
+    async def _refresh_chat_service_context(self, user_id: str):
+        """
+        Internal function to refresh chat service RAG context after resume updates
+        This notifies the chat service to update its context for the user
+        """
+        try:
+            # Import here to avoid circular imports
+            from services.chat_service import get_chat_service
+            
+            # Get chat service and refresh context
+            chat_service = await get_chat_service()
+            await chat_service.refresh_user_context(user_id)
+            logger.info(f"Successfully refreshed chat service context for user {user_id}")
+            
+        except Exception as e:
+            logger.error(f"Error refreshing chat service context for user {user_id}: {e}")
+            # Don't raise here as this is a background operation

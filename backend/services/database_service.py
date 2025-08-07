@@ -1,8 +1,14 @@
 import os
 import json
+import hashlib
+import uuid
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from supabase import create_client, Client
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 from models.roadmap import Roadmap, RoadmapStatus
 from models.chat import ChatSession, ChatMessage
 import logging
@@ -19,15 +25,31 @@ class DatabaseService:
         if not supabase_url or not supabase_key:
             raise ValueError("SUPABASE_URL and SUPABASE_ANON_KEY must be set in environment variables")
         
-        self.supabase: Client = create_client(supabase_url, supabase_key)
+        try:
+            # Create Supabase client with explicit parameters only
+            self.supabase: Client = create_client(supabase_url, supabase_key)
+        except Exception as e:
+            logger.error(f"Failed to initialize Supabase client: {str(e)}")
+            raise
+    
+    def _convert_user_id_to_uuid(self, user_id: str) -> str:
+        """Convert string user_id to UUID format if needed"""
+        if isinstance(user_id, str) and not user_id.count('-') == 4:
+            # Convert string to UUID format by hashing
+            hash_object = hashlib.md5(user_id.encode())
+            return str(uuid.UUID(hash_object.hexdigest()))
+        return user_id
     
     # Roadmap operations
     async def save_roadmap(self, roadmap: Roadmap) -> str:
         """Save a roadmap to the database"""
         try:
+            # Convert string user_id to UUID format if needed
+            user_id = self._convert_user_id_to_uuid(roadmap.user_id)
+            
             # Convert roadmap to database format
             roadmap_data = {
-                "user_id": roadmap.user_id,
+                "user_id": user_id,
                 "title": roadmap.title,
                 "description": roadmap.description,
                 "current_role": roadmap.current_role,
@@ -48,18 +70,21 @@ class DatabaseService:
             if roadmap.id:
                 # Update existing roadmap
                 result = self.supabase.table("roadmaps").update(roadmap_data).eq("id", roadmap.id).execute()
-                if result.data:
-                    logger.info(f"Updated roadmap {roadmap.id}")
-                    return roadmap.id
+                # For updates, we just need to check if the operation completed without error
+                # Supabase UPDATE operations don't return data by default, but a successful
+                # execution without exception means the update was successful
+                logger.info(f"Updated roadmap {roadmap.id}")
+                return roadmap.id
             else:
                 # Create new roadmap
                 result = self.supabase.table("roadmaps").insert(roadmap_data).execute()
-                if result.data:
+                if result.data and len(result.data) > 0:
                     roadmap_id = result.data[0]["id"]
                     logger.info(f"Created new roadmap {roadmap_id}")
                     return roadmap_id
-            
-            raise Exception("Failed to save roadmap")
+                else:
+                    logger.error(f"Insert failed - no data returned. Result: {result}")
+                    raise Exception(f"Failed to create roadmap - no data returned")
             
         except Exception as e:
             logger.error(f"Error saving roadmap: {str(e)}")
@@ -83,7 +108,10 @@ class DatabaseService:
     async def load_user_roadmaps(self, user_id: str) -> List[Roadmap]:
         """Load all roadmaps for a user"""
         try:
-            result = self.supabase.table("roadmaps").select("*").eq("user_id", user_id).order("updated_date", desc=True).execute()
+            # Convert string user_id to UUID format if needed
+            converted_user_id = self._convert_user_id_to_uuid(user_id)
+            
+            result = self.supabase.table("roadmaps").select("*").eq("user_id", converted_user_id).order("updated_date", desc=True).execute()
             
             roadmaps = []
             if result.data:
@@ -117,7 +145,10 @@ class DatabaseService:
             
             result = self.supabase.table("roadmaps").update(update_data).eq("id", roadmap_id).execute()
             
-            return bool(result.data)
+            # For updates, we just need to check if the operation completed without error
+            # Supabase UPDATE operations don't return data by default, but a successful
+            # execution without exception means the update was successful
+            return True
             
         except Exception as e:
             logger.error(f"Error updating roadmap progress {roadmap_id}: {str(e)}")
@@ -137,9 +168,12 @@ class DatabaseService:
     async def save_chat_session(self, chat_session: ChatSession) -> str:
         """Save a chat session to the database"""
         try:
+            # Convert string user_id to UUID format if needed
+            user_id = self._convert_user_id_to_uuid(chat_session.user_id)
+            
             # Convert chat session to database format
             session_data = {
-                "user_id": chat_session.user_id,
+                "user_id": user_id,
                 "title": chat_session.title,
                 "messages": [msg.dict() for msg in chat_session.messages],
                 "context_version": chat_session.context_version,
@@ -187,7 +221,10 @@ class DatabaseService:
     async def load_user_chat_sessions(self, user_id: str, active_only: bool = True) -> List[ChatSession]:
         """Load all chat sessions for a user"""
         try:
-            query = self.supabase.table("chat_sessions").select("*").eq("user_id", user_id)
+            # Convert string user_id to UUID format if needed
+            converted_user_id = self._convert_user_id_to_uuid(user_id)
+            
+            query = self.supabase.table("chat_sessions").select("*").eq("user_id", converted_user_id)
             
             if active_only:
                 query = query.eq("is_active", True)

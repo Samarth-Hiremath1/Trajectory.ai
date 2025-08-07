@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '@/lib/auth-context'
 import { RoadmapGenerator } from './RoadmapGenerator'
 import { RoadmapDisplay } from './RoadmapDisplay'
+import StrengthsAnalysis from './StrengthsAnalysis'
 import { Roadmap, RoadmapGenerationResponse, RoadmapStatus } from '@/types/roadmap'
 
 export function RoadmapInterface() {
@@ -11,11 +12,35 @@ export function RoadmapInterface() {
   const [currentRoadmap, setCurrentRoadmap] = useState<Roadmap | null>(null)
   const [showGenerator, setShowGenerator] = useState(true)
   const [savedRoadmaps, setSavedRoadmaps] = useState<Roadmap[]>([])
+  const [strengthsAnalysis, setStrengthsAnalysis] = useState<any>(null)
 
-
-  // Load saved roadmaps on component mount
+  // Load saved roadmaps and current roadmap on component mount
   useEffect(() => {
     loadSavedRoadmaps()
+    
+    // Try to load current roadmap from localStorage
+    try {
+      const storedData = localStorage.getItem('currentRoadmap')
+      if (storedData) {
+        const { roadmap, strengthsAnalysis } = JSON.parse(storedData)
+        if (roadmap) {
+          // Convert date strings back to Date objects
+          const restoredRoadmap: Roadmap = {
+            ...roadmap,
+            created_date: new Date(roadmap.created_date),
+            updated_date: new Date(roadmap.updated_date),
+            last_accessed_date: roadmap.last_accessed_date ? new Date(roadmap.last_accessed_date) : undefined
+          }
+          setCurrentRoadmap(restoredRoadmap)
+          setStrengthsAnalysis(strengthsAnalysis)
+          setShowGenerator(false)
+        }
+      }
+    } catch (error) {
+      console.error('Error loading roadmap from localStorage:', error)
+      // Clear invalid data
+      localStorage.removeItem('currentRoadmap')
+    }
   }, [])
 
   const loadSavedRoadmaps = async () => {
@@ -51,7 +76,16 @@ export function RoadmapInterface() {
     }
   }
 
-  const handleRoadmapGenerated = (roadmap: RoadmapGenerationResponse['roadmap']) => {
+  const handleRoadmapGenerated = (response: RoadmapGenerationResponse) => {
+    console.log('Roadmap generation response:', response) // Debug log
+    
+    if (!response || !response.roadmap) {
+      console.error('Invalid roadmap response:', response)
+      return
+    }
+    
+    const roadmap = response.roadmap
+    
     // Convert the API response to our Roadmap type
     const convertedRoadmap: Roadmap = {
       id: roadmap.id,
@@ -70,8 +104,16 @@ export function RoadmapInterface() {
       user_context_used: roadmap.generation_metadata?.user_context_used ? {} : undefined
     }
     
+    // Store the strengths analysis
+    setStrengthsAnalysis(roadmap.strengths_analysis)
     setCurrentRoadmap(convertedRoadmap)
     setShowGenerator(false)
+    
+    // Store in localStorage for persistence
+    localStorage.setItem('currentRoadmap', JSON.stringify({
+      roadmap: convertedRoadmap,
+      strengthsAnalysis: roadmap.strengths_analysis
+    }))
   }
 
   const handlePhaseUpdate = async (phaseNumber: number, updates: Record<string, unknown>) => {
@@ -160,7 +202,14 @@ export function RoadmapInterface() {
             status: data.roadmap.status as RoadmapStatus
           }
           setCurrentRoadmap(fullRoadmap)
+          setStrengthsAnalysis(data.roadmap.strengths_analysis || null)
           setShowGenerator(false)
+          
+          // Store in localStorage for persistence
+          localStorage.setItem('currentRoadmap', JSON.stringify({
+            roadmap: fullRoadmap,
+            strengthsAnalysis: data.roadmap.strengths_analysis
+          }))
         }
       } else {
         console.error('Failed to load roadmap details')
@@ -239,11 +288,22 @@ export function RoadmapInterface() {
           targetRoles={profile?.target_roles}
         />
       ) : currentRoadmap ? (
-        <RoadmapDisplay
-          roadmap={currentRoadmap}
-          onPhaseUpdate={handlePhaseUpdate}
-          onEdit={handleEditRoadmap}
-        />
+        <div>
+          {/* Show strengths analysis if available */}
+          {strengthsAnalysis && (
+            <StrengthsAnalysis
+              analysis={strengthsAnalysis}
+              currentRole={currentRoadmap.current_role}
+              targetRole={currentRoadmap.target_role}
+            />
+          )}
+          
+          <RoadmapDisplay
+            roadmap={currentRoadmap}
+            onPhaseUpdate={handlePhaseUpdate}
+            onEdit={handleEditRoadmap}
+          />
+        </div>
       ) : (
         <div className="bg-white rounded-lg shadow-lg p-8 text-center">
           <div className="text-gray-400 mb-4">

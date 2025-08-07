@@ -94,10 +94,16 @@ export function useAsyncOperation<T>(
       })
 
       if (options.onError) {
-        options.onError(normalizedError)
+        try {
+          options.onError(normalizedError)
+        } catch (callbackError) {
+          console.error('Error in onError callback:', callbackError)
+        }
       }
 
-      throw normalizedError
+      // Don't re-throw the error to prevent unhandled rejections
+      // The error is already stored in state for components to handle
+      return undefined
     }
   }, [operation, retryConfig, options])
 

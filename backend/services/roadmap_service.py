@@ -366,6 +366,134 @@ Ensure each phase builds logically on the previous one."""
         else:
             return SkillLevel.INTERMEDIATE
     
+    async def _generate_strengths_weaknesses_analysis(
+        self,
+        request: RoadmapRequest,
+        user_context: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        """Generate analysis of user's current strengths and weaknesses for the target role"""
+        
+        try:
+            # Build context from user background and resume
+            context_text = request.user_background or ""
+            if user_context:
+                resume_context = user_context.get('resume_summary', '')
+                if resume_context:
+                    context_text += f"\n\nResume Summary: {resume_context}"
+            
+            analysis_prompt = f"""Analyze the user's current strengths and weaknesses for transitioning from {request.current_role} to {request.target_role}.
+
+User Background:
+{context_text}
+
+Current Role: {request.current_role}
+Target Role: {request.target_role}
+
+Provide a detailed analysis in the following format:
+
+ROADMAP RATIONALE:
+[Provide a detailed 2-3 paragraph explanation of WHY this specific roadmap was created. Be very specific about what you found in their background/resume. For example: "Your current resume shows extensive full-stack web development experience with React and Node.js, but only minimal machine learning experience with just one PyTorch project. This roadmap focuses heavily on building ML fundamentals because..." Include specific technologies, projects, or experiences mentioned.]
+
+CURRENT STRENGTHS:
+- [Strength 1]: [Explanation of how this helps with the target role]
+- [Strength 2]: [Explanation of how this helps with the target role]
+- [Strength 3]: [Explanation of how this helps with the target role]
+
+AREAS FOR IMPROVEMENT:
+- [Weakness/Gap 1]: [Why this is important for the target role]
+- [Weakness/Gap 2]: [Why this is important for the target role]
+- [Weakness/Gap 3]: [Why this is important for the target role]
+
+KEY TRANSFERABLE SKILLS:
+- [Skill 1]: [How it applies to target role]
+- [Skill 2]: [How it applies to target role]
+
+BIGGEST CHALLENGES:
+- [Challenge 1]: [Impact and mitigation strategy]
+- [Challenge 2]: [Impact and mitigation strategy]
+
+COMPETITIVE ADVANTAGES:
+- [Advantage 1]: [Why this makes you stand out]
+- [Advantage 2]: [Why this makes you stand out]
+
+Be specific and actionable. Focus on skills, experience, and knowledge gaps that are most critical for success in the target role."""
+
+            response = await self.ai_service.generate_text(
+                prompt=analysis_prompt,
+                model_type=ModelType.GEMINI_FLASH,
+                max_tokens=1200,
+                temperature=0.7
+            )
+            
+            # Parse the analysis into structured data
+            analysis = self._parse_strengths_weaknesses_response(response)
+            
+            return analysis
+            
+        except Exception as e:
+            logger.error(f"Error generating strengths/weaknesses analysis: {str(e)}")
+            return {
+                "roadmap_rationale": "",
+                "strengths": [],
+                "weaknesses": [],
+                "transferable_skills": [],
+                "challenges": [],
+                "advantages": []
+            }
+    
+    def _parse_strengths_weaknesses_response(self, response: str) -> Dict[str, Any]:
+        """Parse the strengths/weaknesses analysis response"""
+        
+        analysis = {
+            "roadmap_rationale": "",
+            "strengths": [],
+            "weaknesses": [],
+            "transferable_skills": [],
+            "challenges": [],
+            "advantages": []
+        }
+        
+        # Extract roadmap rationale first
+        rationale_match = re.search(r'ROADMAP RATIONALE:\s*(.+?)(?=\nCURRENT STRENGTHS:|$)', response, re.IGNORECASE | re.DOTALL)
+        if rationale_match:
+            analysis["roadmap_rationale"] = rationale_match.group(1).strip()
+        
+        # Extract each section
+        sections = {
+            "strengths": r'CURRENT STRENGTHS:\s*(.+?)(?=\nAREAS FOR IMPROVEMENT:|$)',
+            "weaknesses": r'AREAS FOR IMPROVEMENT:\s*(.+?)(?=\nKEY TRANSFERABLE SKILLS:|$)',
+            "transferable_skills": r'KEY TRANSFERABLE SKILLS:\s*(.+?)(?=\nBIGGEST CHALLENGES:|$)',
+            "challenges": r'BIGGEST CHALLENGES:\s*(.+?)(?=\nCOMPETITIVE ADVANTAGES:|$)',
+            "advantages": r'COMPETITIVE ADVANTAGES:\s*(.+?)(?=\n[A-Z]|$)'
+        }
+        
+        for key, pattern in sections.items():
+            match = re.search(pattern, response, re.IGNORECASE | re.DOTALL)
+            if match:
+                section_text = match.group(1).strip()
+                items = []
+                
+                for line in section_text.split('\n'):
+                    line = line.strip()
+                    if line.startswith('-'):
+                        # Parse format: - Item: Description
+                        item_match = re.match(r'-\s*([^:]+):\s*(.+)', line)
+                        if item_match:
+                            items.append({
+                                "title": item_match.group(1).strip(),
+                                "description": item_match.group(2).strip()
+                            })
+                        else:
+                            # Fallback: just the item text
+                            items.append({
+                                "title": line.replace('-', '').strip(),
+                                "description": ""
+                            })
+                
+                analysis[key] = items
+        
+        return analysis
+    
     async def generate_roadmap(
         self,
         request: RoadmapRequest,
@@ -378,6 +506,11 @@ Ensure each phase builds logically on the previous one."""
         
         try:
             await self._init_services()
+            
+            # Generate strengths and weaknesses analysis first
+            strengths_analysis = await self._generate_strengths_weaknesses_analysis(
+                request, user_context
+            )
             
             # Get learning resources from scraper
             learning_resources = await self.scraper.get_resources_for_transition(
@@ -427,7 +560,8 @@ Ensure each phase builds logically on the previous one."""
                 success=True,
                 roadmap=roadmap,
                 generation_time_seconds=generation_time,
-                model_used="Gemini Flash"
+                model_used="Gemini Flash",
+                strengths_analysis=strengths_analysis
             )
             
         except Exception as e:

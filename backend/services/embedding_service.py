@@ -42,8 +42,23 @@ class EmbeddingService:
     
     def _init_chromadb_client(self):
         """Initialize ChromaDB client"""
+        # Check if we should use persistent client (for local development)
+        use_persistent = os.getenv("USE_PERSISTENT_CHROMADB", "true").lower() == "true"
+        
+        if use_persistent:
+            # Use persistent client for local development
+            try:
+                chroma_db_path = os.path.join(os.getcwd(), "chroma_db")
+                os.makedirs(chroma_db_path, exist_ok=True)
+                self.chroma_client = chromadb.PersistentClient(path=chroma_db_path)
+                logger.info(f"Using persistent ChromaDB client at: {chroma_db_path}")
+                return
+            except Exception as e:
+                logger.error(f"Failed to initialize persistent ChromaDB client: {e}")
+                raise
+        
+        # Try HTTP client for Docker deployment
         try:
-            # First try HTTP client for Docker deployment
             self.chroma_client = chromadb.HttpClient(
                 host=self.chromadb_host,
                 port=self.chromadb_port
@@ -57,8 +72,8 @@ class EmbeddingService:
             logger.warning(f"Failed to connect to ChromaDB HTTP client: {e}")
             # Fallback to persistent client for local development
             try:
-                import os
                 chroma_db_path = os.path.join(os.getcwd(), "chroma_db")
+                os.makedirs(chroma_db_path, exist_ok=True)
                 self.chroma_client = chromadb.PersistentClient(path=chroma_db_path)
                 logger.info(f"Using persistent ChromaDB client at: {chroma_db_path}")
             except Exception as fallback_error:

@@ -88,6 +88,83 @@ Trajectory.AI is a career navigation platform that provides personalized, AI-gen
 
 ### Requirement 8
 
+**User Story:** As a user, I want the AI mentor chat to have access to my resume and profile data through RAG, so that I can receive personalized feedback without having to re-share my information.
+
+#### Acceptance Criteria
+
+1. WHEN a user sends a message to the AI mentor chat THEN the system SHALL automatically retrieve relevant context from their resume and profile using RAG
+2. WHEN a user asks for resume feedback THEN the system SHALL provide specific suggestions based on their uploaded resume content
+3. WHEN the AI mentor responds THEN the system SHALL not ask users to re-share information that is already available in their profile or resume
+4. WHEN RAG retrieval fails THEN the system SHALL gracefully handle the error and inform the user of any limitations
+
+### Requirement 9
+
+**User Story:** As a user, I want the daily dashboard to be a separate tab from the main dashboard, so that I can focus on daily activities without distraction.
+
+#### Acceptance Criteria
+
+1. WHEN a user navigates the platform THEN the system SHALL provide a separate "Daily Dashboard" tab in the main navigation
+2. WHEN a user accesses the Daily Dashboard THEN the system SHALL display calendar, to-do lists, and notes without the Activity Summary section
+3. WHEN a user is on the main dashboard THEN the system SHALL not display the Activity Summary section
+4. WHEN a user switches between dashboard views THEN the system SHALL maintain their progress and data across tabs
+
+### Requirement 10
+
+**User Story:** As a user, I want meaningful messages in the career to-do list when I haven't generated a roadmap yet, so that I understand how to get started.
+
+#### Acceptance Criteria
+
+1. WHEN a user views the career to-do list without any generated roadmaps THEN the system SHALL display a message encouraging them to generate their first roadmap
+2. WHEN no roadmaps exist THEN the system SHALL provide options to either generate a roadmap or manually add tasks
+3. WHEN a user has generated roadmaps THEN the system SHALL display tasks automatically generated from those roadmaps
+4. WHEN the to-do list is empty THEN the system SHALL provide clear next steps for the user
+
+### Requirement 11
+
+**User Story:** As a user, I want the AI mentor chat to be its own separate tab, so that I can easily access career mentoring without navigating through other features.
+
+#### Acceptance Criteria
+
+1. WHEN a user navigates the platform THEN the system SHALL provide a dedicated "AI Mentor" tab in the main navigation
+2. WHEN a user accesses the AI Mentor tab THEN the system SHALL display the full chat interface with conversation history
+3. WHEN a user switches to other tabs THEN the system SHALL preserve their chat session and conversation state
+4. WHEN a user returns to the AI Mentor tab THEN the system SHALL restore their previous conversation context
+
+### Requirement 12
+
+**User Story:** As a user, I want to view and manage my previously created roadmaps, so that I can reference past plans and track my career development over time.
+
+#### Acceptance Criteria
+
+1. WHEN a user accesses the roadmaps section THEN the system SHALL display a sidebar with titles of all previously generated roadmaps
+2. WHEN a user clicks on a roadmap title THEN the system SHALL display the full roadmap content in the main area
+3. WHEN a user has multiple roadmaps THEN the system SHALL organize them chronologically with clear identification
+4. WHEN a user has no previous roadmaps THEN the system SHALL display an appropriate message encouraging roadmap creation
+
+### Requirement 13
+
+**User Story:** As a user, I want to chat with an AI assistant about my specific roadmap, so that I can request edits and ask clarifying questions about my career plan.
+
+#### Acceptance Criteria
+
+1. WHEN a user views a roadmap THEN the system SHALL provide a chat interface specific to that roadmap
+2. WHEN a user asks questions about the roadmap THEN the system SHALL provide contextual responses based on the specific roadmap content
+3. WHEN a user requests minor edits to the roadmap THEN the system SHALL process the changes and update the roadmap accordingly
+4. WHEN a user asks clarifying questions THEN the system SHALL provide detailed explanations about roadmap phases, skills, or recommendations
+
+### Requirement 14
+
+**User Story:** As a user, I want to provide my name during profile creation and see it displayed throughout the platform, so that I have a personalized experience instead of seeing placeholder names or email addresses.
+
+#### Acceptance Criteria
+
+1. WHEN a user creates their profile THEN the system SHALL include a required name input field
+2. WHEN a user completes profile setup THEN the system SHALL store their name in the user profile
+3. WHEN a user views the platform header THEN the system SHALL display "Welcome, [User's Name]" instead of their email address
+4. WHEN the system references the user in any analysis or content THEN the system SHALL use their actual name instead of placeholder names like "John"
+
+### Requirement 15
+
 **User Story:** As a system administrator, I want the platform to use only free and open-source technologies, so that we can maintain cost-effectiveness while ensuring scalability.
 
 #### Acceptance Criteria

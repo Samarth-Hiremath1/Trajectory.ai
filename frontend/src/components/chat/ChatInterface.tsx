@@ -57,13 +57,20 @@ export function ChatInterface({ className = '' }: ChatInterfaceProps) {
     }
   )
 
-  // State for current message being sent
-  const [currentMessage, setCurrentMessage] = useState<string>('')
+  // Store the current message being sent
+  const currentMessageRef = useRef<string>('')
 
   // Use async operation hook for sending messages
   const sendMessageOp = useAsyncOperation(
     async () => {
-      if (!session || !currentMessage.trim()) return
+      const messageContent = currentMessageRef.current
+      
+      if (!session || !messageContent.trim()) {
+        console.log('No session or message:', { session: !!session, message: messageContent })
+        return
+      }
+
+      console.log('Sending message:', { sessionId: session.id, message: messageContent.trim() })
 
       const response = await fetch(`/api/chat/sessions/${session.id}/messages`, {
         method: 'POST',
@@ -72,8 +79,7 @@ export function ChatInterface({ className = '' }: ChatInterfaceProps) {
         },
         body: JSON.stringify({
           session_id: session.id,
-          message: currentMessage.trim(),
-          include_context: true
+          message: messageContent.trim()
         }),
       })
 
@@ -83,7 +89,9 @@ export function ChatInterface({ className = '' }: ChatInterfaceProps) {
         throw error
       }
 
-      return response.json()
+      const result = await response.json()
+      console.log('Chat response:', result)
+      return result
     }
   )
 
@@ -136,7 +144,9 @@ export function ChatInterface({ className = '' }: ChatInterfaceProps) {
 
     setMessageError(null)
     setIsTyping(true)
-    setCurrentMessage(content.trim())
+
+    // Store the message content in the ref for the async operation
+    currentMessageRef.current = content.trim()
 
     // Add user message immediately to UI
     const userMessage: ChatMessageType = {
@@ -148,24 +158,31 @@ export function ChatInterface({ className = '' }: ChatInterfaceProps) {
     }
     setMessages(prev => [...prev, userMessage])
 
-    try {
-      const chatResponse = await sendMessageOp.execute()
-      
+    const chatResponse = await sendMessageOp.execute()
+    
+    // Check if there was an error in the operation
+    if (sendMessageOp.error) {
+      setMessageError(sendMessageOp.error)
+      // Remove the temporary user message on error
+      setMessages(prev => prev.filter(msg => msg.id !== userMessage.id))
+    } else if (chatResponse && chatResponse.message) {
       // Replace temp user message and add AI response
       setMessages(prev => {
         const filtered = prev.filter(msg => msg.id !== userMessage.id)
         return [...filtered, userMessage, chatResponse.message]
       })
-    } catch (error) {
-      const normalizedError = normalizeError(error)
-      setMessageError(normalizedError)
-      
-      // Remove the temporary user message on error
+    } else {
+      // Handle case where response is invalid
+      const errorMessage = 'Invalid response from server'
+      setMessageError({
+        type: 'UNKNOWN' as any,
+        message: errorMessage,
+        retryable: true
+      })
       setMessages(prev => prev.filter(msg => msg.id !== userMessage.id))
-    } finally {
-      setIsTyping(false)
-      setCurrentMessage('')
     }
+    
+    setIsTyping(false)
   }
 
   const retryLastMessage = () => {

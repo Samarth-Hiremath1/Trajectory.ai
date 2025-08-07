@@ -96,56 +96,101 @@ class RAGChatService:
         return memory
     
     async def _get_user_context(self, user_id: str, query: str) -> Tuple[List[Dict], str]:
-        """Retrieve relevant user context using RAG"""
+        """Retrieve relevant user context using RAG from both resume and profile"""
         try:
-            # Only try to get context if resume service is available
-            if not self.resume_service:
-                return [], "No user background information available."
+            all_context_chunks = []
+            context_parts = []
             
-            # Search resume embeddings for relevant context
-            context_chunks = self.resume_service.search_resume_content(
-                user_id=user_id,
-                query=query,
-                n_results=self.max_context_chunks
-            )
+            # Try to get comprehensive user context from embedding service
+            if self.embedding_service:
+                try:
+                    # Use the comprehensive search that includes both resume and profile
+                    context_chunks = self.embedding_service.search_user_context(
+                        user_id=user_id,
+                        query=query,
+                        n_results=self.max_context_chunks
+                    )
+                    
+                    # Filter by similarity threshold if available
+                    filtered_chunks = []
+                    for chunk in context_chunks:
+                        if chunk.get('distance') is None or chunk['distance'] <= self.context_similarity_threshold:
+                            filtered_chunks.append(chunk)
+                    
+                    all_context_chunks.extend(filtered_chunks)
+                    
+                    # Group context by source for better formatting
+                    resume_chunks = [c for c in filtered_chunks if c.get('source') == 'resume']
+                    profile_chunks = [c for c in filtered_chunks if c.get('source') == 'profile']
+                    
+                    # Format resume context
+                    if resume_chunks:
+                        resume_context = "\n".join([chunk['content'] for chunk in resume_chunks])
+                        context_parts.append(f"Resume Information:\n{resume_context}")
+                    
+                    # Format profile context
+                    if profile_chunks:
+                        profile_context = "\n".join([chunk['content'] for chunk in profile_chunks])
+                        context_parts.append(f"Profile Information:\n{profile_context}")
+                    
+                    logger.info(f"Retrieved {len(filtered_chunks)} context chunks for user {user_id} (resume: {len(resume_chunks)}, profile: {len(profile_chunks)})")
+                    
+                except Exception as e:
+                    logger.warning(f"Comprehensive context search failed, falling back to resume-only: {e}")
+                    # Fallback to resume-only search if comprehensive search fails
+                    if self.resume_service:
+                        try:
+                            resume_chunks = self.resume_service.search_resume_content(
+                                user_id=user_id,
+                                query=query,
+                                n_results=self.max_context_chunks
+                            )
+                            
+                            filtered_resume_chunks = []
+                            for chunk in resume_chunks:
+                                if chunk.get('distance') is None or chunk['distance'] <= self.context_similarity_threshold:
+                                    filtered_resume_chunks.append(chunk)
+                            
+                            all_context_chunks.extend(filtered_resume_chunks)
+                            
+                            if filtered_resume_chunks:
+                                resume_context = "\n".join([chunk['content'] for chunk in filtered_resume_chunks])
+                                context_parts.append(f"Resume Information:\n{resume_context}")
+                                
+                            logger.info(f"Retrieved {len(filtered_resume_chunks)} resume chunks for user {user_id}")
+                            
+                        except Exception as resume_error:
+                            logger.error(f"Resume context search also failed: {resume_error}")
             
-            # Filter by similarity threshold if available
-            filtered_chunks = []
-            for chunk in context_chunks:
-                if chunk.get('distance') is None or chunk['distance'] <= self.context_similarity_threshold:
-                    filtered_chunks.append(chunk)
-            
-            # Format context for prompt
-            if filtered_chunks:
-                context_text = "\n\n".join([
-                    f"Context {i+1}: {chunk['content']}"
-                    for i, chunk in enumerate(filtered_chunks)
-                ])
-                context_text = f"User Background Information:\n{context_text}"
+            # Format final context text
+            if context_parts:
+                context_text = f"User Background Information:\n\n" + "\n\n".join(context_parts)
             else:
-                context_text = "No specific user background information available."
+                context_text = "No specific user background information available. Please ask the user to provide relevant details about their background, experience, and goals."
             
-            logger.info(f"Retrieved {len(filtered_chunks)} context chunks for user {user_id}")
-            return filtered_chunks, context_text
+            return all_context_chunks, context_text
             
         except Exception as e:
             logger.error(f"Failed to retrieve user context: {e}")
-            return [], "No user background information available."
+            # Graceful degradation - provide helpful message
+            fallback_context = "No user background information available. Please ask the user to provide relevant details about their background, experience, and goals to give more personalized advice."
+            return [], fallback_context
     
     def _create_chat_prompt_template(self) -> ChatPromptTemplate:
         """Create LangChain prompt template for career mentoring"""
         system_prompt = """You are an experienced career mentor and advisor. Your role is to provide personalized, actionable career guidance based on the user's background and goals.
 
 Key guidelines:
-- Use the provided user background information to give personalized advice
+- ALWAYS use the provided user background information to give personalized advice when available
+- Never ask users to re-share information that is already provided in their background
 - Be encouraging but realistic about career transitions and timelines
 - Provide specific, actionable steps when possible
-- Ask clarifying questions when you need more information
 - Focus on practical skills, experiences, and strategies
 - Consider industry trends and market demands
 - Be supportive and understanding of career challenges
+- If background information is limited, ask targeted questions to fill specific gaps
 
-If user background information is available, use it to tailor your responses. If not, ask relevant questions to better understand their situation."""
+IMPORTANT: The user background information below contains their resume and profile data. Use this information to provide personalized responses without asking them to repeat what's already known about their experience, education, or goals."""
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),
@@ -217,15 +262,19 @@ If user background information is available, use it to tailor your responses. If
             # Add user message to memory
             memory.chat_memory.add_user_message(request.message)
             
-            # Get user context if requested
-            context_chunks = []
-            context_text = "No specific user background information available."
-            
-            if request.include_context:
+            # Always get user context for personalized responses
+            # This ensures RAG integration is automatic and transparent
+            try:
                 context_chunks, context_text = await self._get_user_context(
                     session.user_id, 
                     request.message
                 )
+                logger.info(f"Successfully retrieved context for user {session.user_id}")
+            except Exception as rag_error:
+                logger.error(f"RAG context retrieval failed for user {session.user_id}: {rag_error}")
+                # Graceful degradation - continue without context
+                context_chunks = []
+                context_text = "Unable to retrieve user background information at this time. Please provide relevant details about your background and goals for personalized advice."
             
             # Create prompt template
             prompt_template = self._create_chat_prompt_template()
@@ -474,6 +523,70 @@ If user background information is available, use it to tailor your responses. If
             return False
         except Exception as e:
             logger.error(f"Failed to persist session {session_id}: {e}")
+            return False
+    
+    async def refresh_user_context(self, user_id: str) -> bool:
+        """Refresh user's RAG context after profile or resume updates"""
+        try:
+            if not self.embedding_service:
+                logger.warning("Embedding service not available for context refresh")
+                return False
+            
+            # Get user profile data from database
+            try:
+                profile = await self.db_service.get_profile(user_id)
+                if profile:
+                    # Create context text from profile data
+                    context_parts = []
+                    
+                    # Add education information
+                    if profile.get('education'):
+                        edu = profile['education']
+                        edu_text = f"Education: {edu.get('degree', '')} in {edu.get('field', '')} from {edu.get('institution', '')} ({edu.get('graduationYear', '')})"
+                        context_parts.append(edu_text)
+                    
+                    # Add career background
+                    if profile.get('career_background'):
+                        context_parts.append(f"Career Background: {profile['career_background']}")
+                    
+                    # Add current role
+                    if profile.get('current_role'):
+                        context_parts.append(f"Current Role: {profile['current_role']}")
+                    
+                    # Add target roles
+                    if profile.get('target_roles'):
+                        target_roles_text = ", ".join(profile['target_roles'])
+                        context_parts.append(f"Target Roles: {target_roles_text}")
+                    
+                    # Add additional details
+                    if profile.get('additional_details'):
+                        context_parts.append(f"Additional Details: {profile['additional_details']}")
+                    
+                    # Combine all context
+                    profile_context = "\n".join(context_parts)
+                    
+                    # Store profile context as embeddings for RAG
+                    if profile_context.strip():
+                        success = self.embedding_service.store_profile_context(user_id, profile_context)
+                        if success:
+                            logger.info(f"Successfully refreshed RAG context for user {user_id}")
+                            return True
+                        else:
+                            logger.error(f"Failed to store profile context for user {user_id}")
+                            return False
+                    else:
+                        logger.warning(f"No profile context to store for user {user_id}")
+                        return True
+                else:
+                    logger.warning(f"No profile found for user {user_id}")
+                    return True
+                    
+            except Exception as profile_error:
+                logger.error(f"Failed to get profile for user {user_id}: {profile_error}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Failed to refresh user context for {user_id}: {e}")
             return False
 
 # Singleton instance for global use

@@ -130,6 +130,7 @@ class RoadmapGenerationResult(BaseModel):
     error_message: Optional[str] = None
     generation_time_seconds: Optional[float] = None
     model_used: Optional[str] = None
+    strengths_analysis: Optional[Dict[str, Any]] = None
 
 class PhaseUpdateRequest(BaseModel):
     """Request to update phase progress"""

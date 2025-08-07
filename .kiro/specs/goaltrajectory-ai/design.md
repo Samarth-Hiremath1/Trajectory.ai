@@ -11,8 +11,12 @@ Trajectory.AI is designed as a modern, scalable career navigation platform built
 ```mermaid
 graph TB
     subgraph "Frontend Layer"
-        UI[React/Next.js UI]
+        UI[React/Next.js UI with Tab Navigation]
         Auth[Supabase Auth Client]
+        MainDash[Main Dashboard]
+        DailyDash[Daily Dashboard Tab]
+        AIMentor[AI Mentor Chat Tab]
+        RoadmapUI[Roadmap Management Tab]
     end
     
     subgraph "API Gateway"
@@ -22,8 +26,10 @@ graph TB
     subgraph "Backend Services"
         UserService[User Profile Service]
         ResumeService[Resume Processing Service]
-        ChatService[AI Chat Service]
+        ChatService[AI Chat Service with RAG]
         RoadmapService[Roadmap Generation Service]
+        RoadmapChatService[Roadmap-Specific Chat Service]
+        TaskService[Task Management Service]
     end
     
     subgraph "Data Layer"
@@ -42,6 +48,8 @@ graph TB
     Gateway --> ResumeService
     Gateway --> ChatService
     Gateway --> RoadmapService
+    Gateway --> RoadmapChatService
+    Gateway --> TaskService
     
     UserService --> Supabase
     ResumeService --> ChromaDB
@@ -51,6 +59,9 @@ graph TB
     RoadmapService --> HF
     RoadmapService --> Roadmap
     RoadmapService --> ChromaDB
+    RoadmapChatService --> ChromaDB
+    RoadmapChatService --> HF
+    TaskService --> Supabase
 ```
 
 ### Technology Stack
@@ -80,12 +91,26 @@ graph TB
 - **OnboardingWizard**: Multi-step guided setup process
 
 #### 3. Main Application
-- **Dashboard**: Primary interface with chat and roadmap sections
-- **ChatInterface**: Real-time AI mentor conversation
-- **RoadmapViewer**: Interactive career roadmap display
+- **Dashboard**: Primary interface with overview and quick actions (without Activity Summary)
+- **DailyDashboard**: Separate tab with calendar, to-do lists, and notes
+- **AIMentorChat**: Dedicated tab for AI mentor conversations with RAG integration
+- **RoadmapInterface**: Separate tab with sidebar for roadmap history and main display area
+- **RoadmapChat**: Context-aware chat for specific roadmap questions and edits
 - **ProfileEditor**: Edit user information and re-upload resume
 
-#### 4. Shared Components
+#### 4. Navigation and Layout Components
+- **TabNavigation**: Main navigation with Dashboard, Daily Dashboard, AI Mentor, and Roadmaps tabs
+- **RoadmapSidebar**: Collapsible sidebar showing roadmap history with titles and creation dates
+- **PersonalizedHeader**: Header component displaying "Welcome, [User's Name]" with user menu
+- **EmptyStateMessage**: Reusable component for meaningful empty states in to-do lists and roadmap history
+
+#### 5. Enhanced Dashboard Components
+- **TaskManager**: Component for displaying and managing career to-do items with empty state handling
+- **RoadmapHistoryList**: Sidebar component for roadmap selection and management
+- **RoadmapDisplayArea**: Main content area for showing selected roadmap details
+- **InlineRoadmapChat**: Chat component embedded within roadmap view for contextual assistance
+
+#### 6. Shared Components
 - **LoadingSpinner**: Consistent loading states
 - **ErrorBoundary**: Error handling and user feedback
 - **NavigationBar**: App navigation with user menu
@@ -126,6 +151,27 @@ class RoadmapService:
     def get_learning_resources(skills: list) -> list
     def update_roadmap(roadmap_id: str, updates: dict) -> Roadmap
     def get_roadmap_progress(user_id: str) -> dict
+    def get_user_roadmaps(user_id: str) -> list[Roadmap]
+    def get_roadmap_by_id(roadmap_id: str) -> Roadmap
+```
+
+#### 5. Roadmap Chat Service
+```python
+class RoadmapChatService:
+    def initialize_roadmap_chat(roadmap_id: str) -> RoadmapChatSession
+    def send_roadmap_message(session_id: str, message: str) -> str
+    def update_roadmap_from_chat(roadmap_id: str, updates: dict) -> Roadmap
+    def get_roadmap_context(roadmap_id: str) -> dict
+```
+
+#### 6. Task Management Service
+```python
+class TaskService:
+    def create_task(user_id: str, task_data: dict) -> Task
+    def get_user_tasks(user_id: str) -> list[Task]
+    def update_task_status(task_id: str, status: str) -> Task
+    def generate_tasks_from_roadmap(roadmap_id: str) -> list[Task]
+    def delete_task(task_id: str) -> bool
 ```
 
 ## Data Models
@@ -135,6 +181,7 @@ class RoadmapService:
 class Profile:
     id: str
     user_id: str  # Supabase Auth user ID
+    name: str  # User's full name for personalization
     education: dict
     career_background: str
     current_role: str
@@ -173,9 +220,36 @@ class Roadmap:
     user_id: str
     current_role: str
     target_role: str
+    title: str  # Display title for roadmap sidebar
     phases: list[dict]
     estimated_timeline: str
     progress: dict
+    created_at: datetime
+    updated_at: datetime
+```
+
+### Roadmap Chat Session Model
+```python
+class RoadmapChatSession:
+    id: str
+    roadmap_id: str
+    user_id: str
+    messages: list[dict]
+    roadmap_context: dict  # Cached roadmap content for context
+    created_at: datetime
+    last_activity: datetime
+```
+
+### Task Model
+```python
+class Task:
+    id: str
+    user_id: str
+    roadmap_id: str  # Optional - null for manually added tasks
+    title: str
+    description: str
+    status: str  # 'pending', 'in_progress', 'completed'
+    due_date: datetime
     created_at: datetime
     updated_at: datetime
 ```
@@ -184,6 +258,7 @@ class Roadmap:
 - **resume_embeddings**: User resume content chunks
 - **knowledge_base**: Scraped learning resources and career information
 - **conversation_memory**: Chat context and user interaction history
+- **roadmap_embeddings**: Roadmap content for context-aware roadmap chat
 
 ## Error Handling
 
@@ -252,6 +327,32 @@ class ErrorResponse:
 - **Model Selection**: Choose appropriate model size based on query complexity
 - **Batch Processing**: Group similar requests for efficiency
 - **Context Management**: Optimize RAG context size for performance
+
+## User Experience Design
+
+### Navigation Flow
+- **Tab-Based Architecture**: Clean separation of concerns with dedicated tabs for Dashboard, Daily Dashboard, AI Mentor, and Roadmaps
+- **Persistent State**: User progress and data maintained across tab switches
+- **Contextual Actions**: Tab-specific actions and shortcuts for improved workflow
+- **Responsive Design**: Mobile-first approach with collapsible sidebars and adaptive layouts
+
+### Personalization Strategy
+- **Name-Based Greeting**: Replace generic email display with personalized "Welcome, [Name]" messaging
+- **Context-Aware Responses**: AI responses tailored to user's specific background and goals
+- **Progressive Disclosure**: Show relevant information based on user's journey stage
+- **Smart Defaults**: Pre-populate forms and suggestions based on user history
+
+### Empty State Management
+- **Encouraging Messaging**: Positive, action-oriented messages for empty states
+- **Clear Next Steps**: Specific guidance on how to get started or add content
+- **Visual Hierarchy**: Use of icons and typography to make empty states engaging
+- **Progressive Onboarding**: Contextual tips and guidance for new features
+
+### RAG Integration Design
+- **Seamless Context**: Automatic retrieval of user context without explicit requests
+- **Transparency**: Clear indication when AI is using personal data for responses
+- **Fallback Handling**: Graceful degradation when RAG retrieval fails
+- **Context Freshness**: Automatic updates when user profile or resume changes
 
 ## Security Considerations
 
