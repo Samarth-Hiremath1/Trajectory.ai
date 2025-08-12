@@ -1,121 +1,84 @@
 #!/usr/bin/env python3
 """
-Script to run database migration for user_id field type change
+Migration runner for adding the resumes table to the database.
+This script will execute the SQL migration to create the resumes table.
 """
 
 import os
 import sys
+import asyncio
 from supabase import create_client
 from dotenv import load_dotenv
 
 # Load environment variables
-load_dotenv('.env')
+load_dotenv()
 
-def run_migration():
-    """Run the database migration"""
+async def run_resumes_table_migration():
+    """Run the migration to create the resumes table"""
     
     # Get Supabase credentials
     supabase_url = os.getenv("SUPABASE_URL")
-    supabase_key = os.getenv("SUPABASE_ANON_KEY")
+    supabase_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_ANON_KEY")
     
     if not supabase_url or not supabase_key:
-        print("❌ SUPABASE_URL and SUPABASE_ANON_KEY must be set in environment variables")
+        print("❌ Error: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY (or SUPABASE_ANON_KEY) must be set in environment variables")
         return False
     
     try:
         # Create Supabase client
         supabase = create_client(supabase_url, supabase_key)
         
-        print("🔄 Running database migration...")
+        # Read the migration SQL
+        migration_file = "../add_resumes_table_migration.sql"
+        if not os.path.exists(migration_file):
+            print(f"❌ Error: Migration file not found: {migration_file}")
+            return False
         
-        # Read migration SQL
-        with open('migrate_user_id_to_text.sql', 'r') as f:
+        with open(migration_file, 'r') as f:
             migration_sql = f.read()
         
-        # Split into individual statements
-        statements = [stmt.strip() for stmt in migration_sql.split(';') if stmt.strip()]
+        print("🚀 Running resumes table migration...")
+        print("📄 Migration SQL:")
+        print("-" * 50)
+        print(migration_sql)
+        print("-" * 50)
         
-        # Execute each statement
-        for i, statement in enumerate(statements):
-            if statement.startswith('--') or not statement:
-                continue
-                
-            print(f"Executing statement {i+1}/{len(statements)}: {statement[:50]}...")
-            
-            try:
-                # Use rpc to execute raw SQL
-                result = supabase.rpc('exec_sql', {'sql': statement}).execute()
-                print(f"✅ Statement {i+1} executed successfully")
-            except Exception as e:
-                print(f"⚠️  Statement {i+1} failed (might be expected): {e}")
-                # Continue with other statements
+        # Note: Supabase Python client doesn't support raw SQL execution
+        # We need to use the REST API or run this manually
+        print("\n⚠️  IMPORTANT: The Python Supabase client doesn't support raw SQL execution.")
+        print("Please run this migration manually using one of these methods:")
+        print("\n1. Supabase Dashboard:")
+        print("   - Go to your Supabase project dashboard")
+        print("   - Navigate to SQL Editor")
+        print("   - Copy and paste the SQL above")
+        print("   - Click 'Run'")
+        print("\n2. Using psql command line:")
+        print("   - Connect to your database using the connection string from Supabase")
+        print("   - Run the SQL commands above")
+        print("\n3. Using any PostgreSQL client (pgAdmin, DBeaver, etc.)")
         
-        print("✅ Migration completed!")
-        return True
-        
-    except Exception as e:
-        print(f"❌ Migration failed: {e}")
-        return False
-
-def verify_migration():
-    """Verify the migration was successful"""
-    
-    supabase_url = os.getenv("SUPABASE_URL")
-    supabase_key = os.getenv("SUPABASE_ANON_KEY")
-    
-    try:
-        supabase = create_client(supabase_url, supabase_key)
-        
-        print("🔍 Verifying migration...")
-        
-        # Try to insert a test record with string user_id
-        test_data = {
-            "user_id": "test_user_123",
-            "current_role": "Test Role",
-            "target_role": "Test Target",
-            "title": "Test Roadmap",
-            "phases": []
-        }
-        
-        result = supabase.table("roadmaps").insert(test_data).execute()
-        
-        if result.data:
-            # Clean up test data
-            test_id = result.data[0]["id"]
-            supabase.table("roadmaps").delete().eq("id", test_id).execute()
-            print("✅ Migration verification successful!")
+        # Check if the table already exists
+        try:
+            result = supabase.table("resumes").select("count", count="exact").limit(1).execute()
+            print("\n✅ The 'resumes' table already exists!")
             return True
-        else:
-            print("❌ Migration verification failed - no data returned")
+        except Exception:
+            print("\n❌ The 'resumes' table does not exist yet. Please run the migration SQL manually.")
             return False
             
     except Exception as e:
-        print(f"❌ Migration verification failed: {e}")
+        print(f"❌ Error: {e}")
         return False
 
 if __name__ == "__main__":
-    print("🚀 Starting database migration")
+    print("🔧 Resume Table Migration Runner")
     print("=" * 40)
     
-    # Note: Since we can't execute raw SQL with the anon key,
-    # we'll need to run this migration manually in the Supabase dashboard
-    print("⚠️  This migration needs to be run manually in the Supabase SQL editor")
-    print("📋 Please copy the contents of 'migrate_user_id_to_text.sql' and run it in:")
-    print("   https://supabase.com/dashboard/project/[your-project]/sql")
-    print()
-    print("After running the migration, you can test it by restarting the backend server.")
+    success = asyncio.run(run_resumes_table_migration())
     
-    # For now, let's just verify if we can connect to the database
-    supabase_url = os.getenv("SUPABASE_URL")
-    supabase_key = os.getenv("SUPABASE_ANON_KEY")
-    
-    if supabase_url and supabase_key:
-        try:
-            supabase = create_client(supabase_url, supabase_key)
-            # Test connection
-            result = supabase.table("roadmaps").select("id").limit(1).execute()
-            print("✅ Database connection successful")
-        except Exception as e:
-            print(f"❌ Database connection failed: {e}")
+    if success:
+        print("\n✅ Migration completed successfully!")
+        print("🎉 You can now upload resumes and they will be properly stored in the database.")
     else:
-        print("❌ Missing database credentials")
+        print("\n❌ Migration failed. Please run the SQL manually as described above.")
+        sys.exit(1)

@@ -11,16 +11,16 @@ export function RoadmapInterface() {
   const { profile } = useAuth()
   const [currentRoadmap, setCurrentRoadmap] = useState<Roadmap | null>(null)
   const [showGenerator, setShowGenerator] = useState(true)
-  const [savedRoadmaps, setSavedRoadmaps] = useState<Roadmap[]>([])
   const [strengthsAnalysis, setStrengthsAnalysis] = useState<any>(null)
 
-  // Load saved roadmaps and current roadmap on component mount
+  // Load current roadmap from user-specific storage on component mount
   useEffect(() => {
-    loadSavedRoadmaps()
+    if (!profile?.user_id) return
     
-    // Try to load current roadmap from localStorage
+    // Try to load current roadmap from user-specific localStorage
     try {
-      const storedData = localStorage.getItem('currentRoadmap')
+      const userStorageKey = `currentRoadmap_${profile.user_id}`
+      const storedData = localStorage.getItem(userStorageKey)
       if (storedData) {
         const { roadmap, strengthsAnalysis } = JSON.parse(storedData)
         if (roadmap) {
@@ -39,42 +39,12 @@ export function RoadmapInterface() {
     } catch (error) {
       console.error('Error loading roadmap from localStorage:', error)
       // Clear invalid data
-      localStorage.removeItem('currentRoadmap')
+      const userStorageKey = `currentRoadmap_${profile.user_id}`
+      localStorage.removeItem(userStorageKey)
     }
-  }, [])
+  }, [profile?.user_id])
 
-  const loadSavedRoadmaps = async () => {
-    try {
-      const userId = 'temp_user_123' // TODO: Get from auth context
-      const response = await fetch(`/api/roadmap/user/${userId}`)
-      
-      if (response.ok) {
-        const data = await response.json()
-        if (data.success) {
-          // Convert API response to Roadmap objects
-          const roadmaps: Roadmap[] = data.roadmaps.map((r: any) => ({
-            id: r.id,
-            user_id: r.user_id || userId,
-            title: r.title,
-            description: r.description,
-            current_role: r.current_role,
-            target_role: r.target_role,
-            status: r.status as RoadmapStatus,
-            phases: [], // We'll load full details when needed
-            total_estimated_weeks: r.total_estimated_weeks,
-            created_date: new Date(r.created_date),
-            updated_date: new Date(r.updated_date),
-            last_accessed_date: r.last_accessed_date ? new Date(r.last_accessed_date) : undefined,
-            overall_progress_percentage: r.overall_progress_percentage,
-            phase_count: r.phase_count
-          }))
-          setSavedRoadmaps(roadmaps)
-        }
-      }
-    } catch (error) {
-      console.error('Error loading saved roadmaps:', error)
-    }
-  }
+
 
   const handleRoadmapGenerated = (response: RoadmapGenerationResponse) => {
     console.log('Roadmap generation response:', response) // Debug log
@@ -89,7 +59,7 @@ export function RoadmapInterface() {
     // Convert the API response to our Roadmap type
     const convertedRoadmap: Roadmap = {
       id: roadmap.id,
-      user_id: roadmap.user_id || 'temp_user_123',
+      user_id: roadmap.user_id || profile?.user_id || 'unknown',
       title: roadmap.title,
       description: roadmap.description,
       current_role: roadmap.current_role,
@@ -109,11 +79,14 @@ export function RoadmapInterface() {
     setCurrentRoadmap(convertedRoadmap)
     setShowGenerator(false)
     
-    // Store in localStorage for persistence
-    localStorage.setItem('currentRoadmap', JSON.stringify({
-      roadmap: convertedRoadmap,
-      strengthsAnalysis: roadmap.strengths_analysis
-    }))
+    // Store in user-specific localStorage for persistence
+    if (profile?.user_id) {
+      const userStorageKey = `currentRoadmap_${profile.user_id}`
+      localStorage.setItem(userStorageKey, JSON.stringify({
+        roadmap: convertedRoadmap,
+        strengthsAnalysis: roadmap.strengths_analysis
+      }))
+    }
   }
 
   const handlePhaseUpdate = async (phaseNumber: number, updates: Record<string, unknown>) => {
@@ -140,6 +113,15 @@ export function RoadmapInterface() {
         : 0
 
       setCurrentRoadmap(updatedRoadmap)
+
+      // Save to user-specific localStorage for persistence
+      if (profile?.user_id) {
+        const userStorageKey = `currentRoadmap_${profile.user_id}`
+        localStorage.setItem(userStorageKey, JSON.stringify({
+          roadmap: updatedRoadmap,
+          strengthsAnalysis: strengthsAnalysis
+        }))
+      }
 
       // Save updates to backend
       try {
@@ -186,44 +168,7 @@ export function RoadmapInterface() {
     setShowGenerator(true)
   }
 
-  const handleLoadRoadmap = async (roadmap: Roadmap) => {
-    try {
-      // Load full roadmap details from database
-      const response = await fetch(`/api/roadmap/${roadmap.id}`)
-      
-      if (response.ok) {
-        const data = await response.json()
-        if (data.success) {
-          const fullRoadmap: Roadmap = {
-            ...data.roadmap,
-            created_date: new Date(data.roadmap.created_date),
-            updated_date: new Date(data.roadmap.updated_date),
-            last_accessed_date: data.roadmap.last_accessed_date ? new Date(data.roadmap.last_accessed_date) : undefined,
-            status: data.roadmap.status as RoadmapStatus
-          }
-          setCurrentRoadmap(fullRoadmap)
-          setStrengthsAnalysis(data.roadmap.strengths_analysis || null)
-          setShowGenerator(false)
-          
-          // Store in localStorage for persistence
-          localStorage.setItem('currentRoadmap', JSON.stringify({
-            roadmap: fullRoadmap,
-            strengthsAnalysis: data.roadmap.strengths_analysis
-          }))
-        }
-      } else {
-        console.error('Failed to load roadmap details')
-        // Fallback to summary data
-        setCurrentRoadmap(roadmap)
-        setShowGenerator(false)
-      }
-    } catch (error) {
-      console.error('Error loading roadmap details:', error)
-      // Fallback to summary data
-      setCurrentRoadmap(roadmap)
-      setShowGenerator(false)
-    }
-  }
+
 
   return (
     <div className="space-y-6">
@@ -254,31 +199,7 @@ export function RoadmapInterface() {
         )}
       </div>
 
-      {/* Saved Roadmaps Quick Access */}
-      {savedRoadmaps.length > 0 && (
-        <div className="bg-white rounded-lg shadow p-4">
-          <h3 className="text-lg font-semibold text-gray-900 mb-3">Your Roadmaps</h3>
-          <div className="flex space-x-3 overflow-x-auto">
-            {savedRoadmaps.map((roadmap) => (
-              <button
-                key={roadmap.id}
-                onClick={() => handleLoadRoadmap(roadmap)}
-                className="flex-shrink-0 p-3 border border-gray-200 rounded-lg hover:border-indigo-300 hover:bg-indigo-50 transition-colors"
-              >
-                <div className="text-left">
-                  <p className="font-medium text-gray-900 text-sm">{roadmap.title}</p>
-                  <p className="text-xs text-gray-500">
-                    {roadmap.current_role} → {roadmap.target_role}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    {roadmap.overall_progress_percentage}% complete
-                  </p>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+
 
       {/* Main Content */}
       {showGenerator ? (

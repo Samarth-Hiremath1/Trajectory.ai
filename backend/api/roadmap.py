@@ -22,10 +22,21 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/roadmap", tags=["roadmap"])
 
+from fastapi import Header
+
+async def get_current_user_id(x_user_id: str = Header(None)) -> str:
+    """Get user ID from request headers"""
+    if not x_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User ID not provided in headers"
+        )
+    return x_user_id
+
 @router.post("/generate", response_model=Dict[str, Any])
 async def generate_roadmap(
     request: RoadmapRequest,
-    user_id: str = "temp_user_123"  # TODO: Get from auth
+    user_id: str = Depends(get_current_user_id)
 ):
     """Generate a career roadmap based on user request"""
     
@@ -156,7 +167,7 @@ async def get_career_suggestions(
     current_role: str,
     user_background: str = "",
     max_suggestions: int = 5,
-    user_id: str = "temp_user_123"  # TODO: Get from auth
+    user_id: str = Depends(get_current_user_id)
 ):
     """Get suggested target roles for career transition"""
     

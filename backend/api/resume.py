@@ -75,8 +75,26 @@ async def upload_resume(
             processed_date=datetime.utcnow()
         )
         
-        # TODO: Save resume to database (Supabase integration)
-        # For now, we'll just return the response
+        # Save resume to database
+        from services.database_service import DatabaseService
+        db_service = DatabaseService()
+        
+        resume_data = {
+            "id": resume.id,
+            "user_id": resume.user_id,
+            "filename": resume.filename,
+            "file_path": resume.file_path,
+            "file_size": resume.file_size,
+            "content_type": resume.content_type,
+            "parsed_content": resume.parsed_content,
+            "text_chunks": [chunk.dict() for chunk in resume.text_chunks],
+            "processing_status": resume.processing_status.value,
+            "upload_date": resume.upload_date.isoformat(),
+            "processed_date": resume.processed_date.isoformat() if resume.processed_date else None
+        }
+        
+        saved_resume_id = await db_service.save_resume(resume_data)
+        resume.id = saved_resume_id
         
         return ResumeResponse(
             id=resume.id,
@@ -135,6 +153,46 @@ async def delete_resume(
     )
 
 
+@router.get("/user/{user_id}")
+async def get_user_resume(
+    user_id: str,
+    current_user_id: str = Depends(get_current_user_id)
+):
+    """
+    Get the resume for a specific user
+    
+    - **user_id**: ID of the user whose resume to retrieve
+    - Returns: User's resume data
+    """
+    try:
+        # For security, ensure user can only access their own resume
+        if user_id != current_user_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only access your own resume"
+            )
+        
+        from services.database_service import DatabaseService
+        db_service = DatabaseService()
+        
+        resume_data = await db_service.get_user_resume(user_id)
+        
+        if not resume_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No resume found for this user"
+            )
+        
+        return resume_data
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get user resume: {str(e)}"
+        )
+
 @router.get("/list", response_model=list[ResumeResponse])
 async def list_user_resumes(
     user_id: str = Depends(get_current_user_id)
@@ -144,9 +202,33 @@ async def list_user_resumes(
     
     - Returns: List of user's resumes with processing status
     """
-    # TODO: Implement database lookup for user resumes
-    # For now, return empty list
-    return []
+    try:
+        from services.database_service import DatabaseService
+        db_service = DatabaseService()
+        
+        resume_data = await db_service.get_user_resume(user_id)
+        
+        if not resume_data:
+            return []
+        
+        # Convert to ResumeResponse format
+        resume_response = ResumeResponse(
+            id=resume_data['id'],
+            filename=resume_data['filename'],
+            processing_status=ProcessingStatus(resume_data['processing_status']),
+            upload_date=resume_data['upload_date'],
+            processed_date=resume_data.get('processed_date'),
+            error_message=resume_data.get('error_message'),
+            chunk_count=len(resume_data.get('text_chunks', []))
+        )
+        
+        return [resume_response]
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list user resumes: {str(e)}"
+        )
 
 
 @router.post("/search")

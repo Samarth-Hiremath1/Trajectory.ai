@@ -128,28 +128,28 @@
   - Test chat responses to ensure personalized feedback based on user data
   - _Requirements: 8.1, 8.2, 8.3, 8.4_
 
-- [ ] 19. Restructure dashboard layout and navigation
+- [x] 19. Restructure dashboard layout and navigation
   - Remove Activity Summary section from main dashboard
   - Create separate Daily Dashboard tab with calendar, to-do lists, and notes
   - Update main navigation to include Daily Dashboard as separate tab
   - Ensure data persistence across dashboard views
   - _Requirements: 9.1, 9.2, 9.3, 9.4_
 
-- [ ] 20. Enhance career to-do list with meaningful empty states
+- [x] 20. Enhance career to-do list with meaningful empty states
   - Update to-do list component to detect when user has no roadmaps
   - Implement encouraging message for first-time users to generate roadmaps
   - Add options for manual task creation when no roadmaps exist
   - Ensure automatic task generation from existing roadmaps continues to work
   - _Requirements: 10.1, 10.2, 10.3, 10.4_
 
-- [ ] 21. Create dedicated AI Mentor tab
+- [x] 21. Create dedicated AI Mentor tab
   - Move AI mentor chat to separate tab in main navigation
   - Implement full chat interface with conversation history preservation
   - Ensure chat session state persists when switching between tabs
   - Add proper loading states and error handling for chat functionality
   - _Requirements: 11.1, 11.2, 11.3, 11.4_
 
-- [ ] 22. Implement roadmap history and management interface
+- [x] 22. Implement roadmap history and management interface
   - Create sidebar component displaying all user roadmaps with titles
   - Implement main roadmap display area that updates based on sidebar selection
   - Add chronological organization of roadmaps with clear identification
@@ -157,7 +157,7 @@
   - Update roadmap data model to include display titles
   - _Requirements: 12.1, 12.2, 12.3, 12.4_
 
-- [ ] 23. Build roadmap-specific chat functionality
+- [x] 23. Build roadmap-specific chat functionality
   - Create roadmap chat service with context-aware responses
   - Implement chat interface embedded within roadmap view
   - Add functionality for processing roadmap edit requests from chat
@@ -165,7 +165,7 @@
   - Ensure chat responses are specific to the selected roadmap
   - _Requirements: 13.1, 13.2, 13.3, 13.4_
 
-- [ ] 24. Add name field to user profile and update personalization
+- [x] 24. Add name field to user profile and update personalization
   - Update user profile data model and database schema to include required name field
   - Add name input field to profile creation form with proper validation
   - Update ProfileSetupForm component to collect and validate user name
@@ -174,7 +174,7 @@
   - Ensure name is properly stored and retrieved across all user interactions
   - _Requirements: 14.1, 14.2, 14.3, 14.4_
 
-- [ ] 25. Create task management system for enhanced to-do functionality
+- [x] 25. Create task management system for enhanced to-do functionality
   - Implement Task data model with roadmap association and manual task support
   - Create task creation, update, and completion functionality
   - Build task management API endpoints with proper validation

@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth-context'
 import { createProfile } from '@/lib/profile'
 
 interface FormData {
+  name: string
   education: {
     degree: string
     field: string
@@ -20,6 +21,7 @@ interface FormData {
 
 export default function SimpleOnboardingForm() {
   const [formData, setFormData] = useState<FormData>({
+    name: '',
     education: {
       degree: '',
       field: '',
@@ -79,6 +81,7 @@ export default function SimpleOnboardingForm() {
 
     try {
       const profile = await createProfile(user.id, {
+        name: formData.name,
         education: formData.education,
         career_background: formData.career_background,
         current_role: formData.current_role,
@@ -130,6 +133,22 @@ export default function SimpleOnboardingForm() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Name Section */}
+            <div>
+              <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+                Full Name *
+              </label>
+              <input
+                type="text"
+                id="name"
+                required
+                value={formData.name}
+                onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                placeholder="e.g., John Smith"
+              />
+            </div>
+
             {/* Education Section */}
             <div>
               <h3 className="text-lg font-medium text-gray-900 mb-4">Education</h3>

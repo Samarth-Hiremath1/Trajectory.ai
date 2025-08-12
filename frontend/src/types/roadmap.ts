@@ -111,6 +111,7 @@ export interface RoadmapGenerationResponse {
     phase_count: number
     phases: RoadmapPhase[]
     created_date: string
+    strengths_analysis?: any
     generation_metadata: {
       model_used: string
       generation_time_seconds: number

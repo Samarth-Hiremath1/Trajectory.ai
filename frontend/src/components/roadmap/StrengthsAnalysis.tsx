@@ -55,7 +55,7 @@ export default function StrengthsAnalysis({ analysis, currentRole, targetRole }:
           Career Transition Analysis
         </h2>
         <p className="text-gray-600 mb-4">
-          Based on your background, here's an analysis of your transition from{' '}
+          Based on your background, here&apos;s an analysis of your transition from{' '}
           <span className="font-semibold text-blue-600">{currentRole}</span> to{' '}
           <span className="font-semibold text-green-600">{targetRole}</span>
         </p>
@@ -113,7 +113,7 @@ export default function StrengthsAnalysis({ analysis, currentRole, targetRole }:
 
       <div className="mt-6 p-4 bg-gray-50 rounded-lg">
         <p className="text-sm text-gray-600">
-          💡 <strong>Tip:</strong> This analysis helps explain the "why" behind each step in your roadmap. 
+          💡 <strong>Tip:</strong> This analysis helps explain the &ldquo;why&rdquo; behind each step in your roadmap. 
           Use it to understand which areas need the most focus and how your existing skills give you an advantage.
         </p>
       </div>

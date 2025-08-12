@@ -174,8 +174,10 @@ class EmbeddingService:
     def search_resume_embeddings(self, user_id: str, query: str, n_results: int = 5) -> List[Dict]:
         """Search for relevant resume chunks using semantic similarity"""
         try:
+            logger.info(f"Looking for resume collection: {self.resume_collection_name}")
             # Get resume collection
             collection = self.chroma_client.get_collection(name=self.resume_collection_name)
+            logger.info(f"Found resume collection {self.resume_collection_name} with {collection.count()} documents")
             
             # Generate query embedding
             query_embedding = self.generate_embeddings([query])[0]
@@ -324,6 +326,16 @@ class EmbeddingService:
     def search_user_context(self, user_id: str, query: str, n_results: int = 5) -> List[Dict]:
         """Search across all user context (resume + profile) for relevant information"""
         try:
+            logger.info(f"Searching user context for user_id: {user_id} with query: {query[:50]}...")
+            
+            # List all collections for debugging
+            try:
+                collections = self.chroma_client.list_collections()
+                collection_names = [col.name for col in collections]
+                logger.info(f"Available collections: {collection_names}")
+            except Exception as e:
+                logger.warning(f"Could not list collections: {e}")
+            
             all_results = []
             
             # Search resume embeddings

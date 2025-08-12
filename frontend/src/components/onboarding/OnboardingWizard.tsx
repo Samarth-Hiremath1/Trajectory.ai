@@ -17,6 +17,7 @@ const STEPS = [
 export default function OnboardingWizard() {
   const [currentStep, setCurrentStep] = useState(1)
   const [profileData, setProfileData] = useState<ProfileFormData>({
+    name: '',
     education: {
       degree: '',
       field: '',
@@ -53,6 +54,7 @@ export default function OnboardingWizard() {
     try {
       // Create profile in Supabase
       const profile = await createProfile(user.id, {
+        name: profileData.name,
         education: profileData.education,
         career_background: profileData.career_background,
         current_role: profileData.current_role,
@@ -64,13 +66,50 @@ export default function OnboardingWizard() {
         throw new Error('Failed to create profile')
       }
 
-      // TODO: Handle resume file upload to storage
-      // For now, we'll just store the file reference
+      // Upload resume file to backend if provided
       if (file) {
-        console.log('Resume file selected:', file.name, file.size)
-        // In a future implementation, upload to Supabase Storage:
-        // const resumeUrl = await uploadResumeToStorage(user.id, file)
-        // await updateProfile(user.id, { resume_url: resumeUrl })
+        console.log('Uploading resume file:', file.name, file.size)
+        
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('user_id', user.id)
+        
+        const resumeResponse = await fetch('/api/resume/upload', {
+          method: 'POST',
+          body: formData
+        })
+        
+        if (!resumeResponse.ok) {
+          const errorData = await resumeResponse.json().catch(() => ({}))
+          throw new Error(errorData.detail || 'Failed to upload resume')
+        }
+        
+        const resumeResult = await resumeResponse.json()
+        console.log('Resume upload result:', resumeResult)
+        
+        // Check if there's an error message in the response
+        if (resumeResult.error_message) {
+          throw new Error(resumeResult.error_message)
+        }
+        
+        // If we got here and the response was 200 OK, the upload was successful
+      }
+
+      // Refresh chat service context to include both profile and resume data
+      try {
+        const contextResponse = await fetch(`/api/chat/users/${user.id}/refresh-context`, {
+          method: 'POST'
+        })
+        
+        if (contextResponse.ok) {
+          const contextResult = await contextResponse.json()
+          console.log('Chat context refresh result:', contextResult)
+        } else {
+          console.warn('Failed to refresh chat context, but continuing with onboarding')
+        }
+      } catch (contextError) {
+        console.warn('Error refreshing chat context:', contextError)
+        // Don't fail onboarding for this
       }
 
       // Refresh the profile in auth context

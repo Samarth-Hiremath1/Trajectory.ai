@@ -11,6 +11,15 @@ export async function GET(
     const userBackground = searchParams.get('user_background') || ''
     const maxSuggestions = searchParams.get('max_suggestions') || '5'
     
+    // Get user ID from request headers
+    const userIdHeader = request.headers.get('X-User-ID')
+    if (!userIdHeader) {
+      return NextResponse.json(
+        { success: false, error: 'User authentication required' },
+        { status: 401 }
+      )
+    }
+    
     const resolvedParams = await params
     const encodedRole = encodeURIComponent(resolvedParams.currentRole)
     const queryParams = new URLSearchParams({
@@ -25,6 +34,7 @@ export async function GET(
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
+          'X-User-ID': userIdHeader,
         }
       }
     )

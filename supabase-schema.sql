@@ -3,6 +3,7 @@
 CREATE TABLE IF NOT EXISTS profiles (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id TEXT NOT NULL,
+  name TEXT,
   education JSONB DEFAULT '{}',
   career_background TEXT,
   "current_role" TEXT,

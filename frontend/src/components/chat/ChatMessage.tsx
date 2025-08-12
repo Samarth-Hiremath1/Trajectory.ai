@@ -2,6 +2,7 @@
 
 import { ChatMessage as ChatMessageType, MessageRole } from '@/types/chat'
 import { formatDistanceToNow } from '@/lib/utils'
+import { FormattedAIResponse } from './FormattedAIResponse'
 
 interface ChatMessageProps {
   message: ChatMessageType
@@ -32,7 +33,13 @@ export function ChatMessage({ message }: ChatMessageProps) {
               ? 'bg-indigo-600 text-white'
               : 'bg-gray-100 text-gray-900'
           }`}>
-            <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+            {isUser ? (
+              <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+            ) : (
+              <div className="text-sm">
+                <FormattedAIResponse content={message.content} />
+              </div>
+            )}
           </div>
           
           {/* Timestamp */}

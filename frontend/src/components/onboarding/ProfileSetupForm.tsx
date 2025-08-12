@@ -3,6 +3,7 @@
 import { useState } from 'react'
 
 export interface ProfileFormData {
+  name: string
   education: {
     degree: string
     field: string
@@ -27,6 +28,13 @@ export default function ProfileSetupForm({ initialData, onSubmit, isSubmitting }
 
   const validateForm = (): boolean => {
     const newErrors: Record<string, string> = {}
+
+    // Name validation
+    if (!formData.name.trim()) {
+      newErrors.name = 'Name is required'
+    } else if (formData.name.trim().length < 2) {
+      newErrors.name = 'Name must be at least 2 characters long'
+    }
 
     // Education validation
     if (!formData.education.degree.trim()) {
@@ -122,6 +130,34 @@ export default function ProfileSetupForm({ initialData, onSubmit, isSubmitting }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
+      <div>
+        <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+          Full Name *
+        </label>
+        <input
+          type="text"
+          id="name"
+          value={formData.name}
+          onChange={(e) => {
+            setFormData(prev => ({ ...prev, name: e.target.value }))
+            if (errors.name) {
+              setErrors(prev => {
+                const newErrors = { ...prev }
+                delete newErrors.name
+                return newErrors
+              })
+            }
+          }}
+          className={`mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm ${
+            errors.name ? 'border-red-300' : ''
+          }`}
+          placeholder="e.g., John Smith"
+        />
+        {errors.name && (
+          <p className="mt-1 text-sm text-red-600">{errors.name}</p>
+        )}
+      </div>
+
       <div>
         <h3 className="text-lg font-medium text-gray-900 mb-4">Education Background</h3>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

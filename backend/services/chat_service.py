@@ -101,6 +101,79 @@ class RAGChatService:
             all_context_chunks = []
             context_parts = []
             
+            logger.info(f"Starting user context retrieval for user {user_id}")
+            
+            # Always try to get profile data from database first
+            try:
+                profile = await self.db_service.get_profile(user_id)
+                if profile:
+                    logger.info(f"Found profile data for user {user_id}")
+                    # Create context text from profile data
+                    profile_context_parts = []
+                    
+                    # Add name
+                    if profile.get('name'):
+                        profile_context_parts.append(f"Name: {profile['name']}")
+                    
+                    # Add education information
+                    if profile.get('education'):
+                        edu = profile['education']
+                        if isinstance(edu, dict):
+                            edu_text = f"Education: {edu.get('degree', '')} in {edu.get('field', '')} from {edu.get('institution', '')} ({edu.get('graduationYear', '')})"
+                            profile_context_parts.append(edu_text)
+                    
+                    # Add career background
+                    if profile.get('career_background'):
+                        profile_context_parts.append(f"Career Background: {profile['career_background']}")
+                    
+                    # Add current role
+                    if profile.get('current_role'):
+                        profile_context_parts.append(f"Current Role: {profile['current_role']}")
+                    
+                    # Add target roles
+                    if profile.get('target_roles'):
+                        if isinstance(profile['target_roles'], list):
+                            target_roles_text = ", ".join(profile['target_roles'])
+                        else:
+                            target_roles_text = str(profile['target_roles'])
+                        profile_context_parts.append(f"Target Roles: {target_roles_text}")
+                    
+                    # Add additional details
+                    if profile.get('additional_details'):
+                        profile_context_parts.append(f"Additional Details: {profile['additional_details']}")
+                    
+                    # Combine profile context
+                    if profile_context_parts:
+                        profile_context = "\n".join(profile_context_parts)
+                        context_parts.append(f"Profile Information:\n{profile_context}")
+                        logger.info(f"Added profile context for user {user_id}")
+                else:
+                    logger.warning(f"No profile found for user {user_id}")
+            except Exception as profile_error:
+                logger.error(f"Failed to get profile for user {user_id}: {profile_error}")
+            
+            # Try to get resume data from database
+            try:
+                resume = await self.db_service.get_user_resume(user_id)
+                if resume and resume.get('parsed_content'):
+                    logger.info(f"Found resume data for user {user_id}")
+                    
+                    # Extract text content from parsed resume
+                    parsed_content = resume['parsed_content']
+                    if isinstance(parsed_content, dict) and parsed_content.get('text_content'):
+                        resume_text = parsed_content['text_content']
+                        
+                        # Limit resume text to avoid token overflow (keep first 2000 characters)
+                        if len(resume_text) > 2000:
+                            resume_text = resume_text[:2000] + "... [resume content truncated]"
+                        
+                        context_parts.append(f"Resume Content:\n{resume_text}")
+                        logger.info(f"Added full resume content for user {user_id}")
+                else:
+                    logger.warning(f"No resume found for user {user_id}")
+            except Exception as resume_error:
+                logger.error(f"Failed to get resume for user {user_id}: {resume_error}")
+            
             # Try to get comprehensive user context from embedding service
             if self.embedding_service:
                 try:
@@ -121,19 +194,25 @@ class RAGChatService:
                     
                     # Group context by source for better formatting
                     resume_chunks = [c for c in filtered_chunks if c.get('source') == 'resume']
-                    profile_chunks = [c for c in filtered_chunks if c.get('source') == 'profile']
+                    embedding_profile_chunks = [c for c in filtered_chunks if c.get('source') == 'profile']
                     
                     # Format resume context
                     if resume_chunks:
                         resume_context = "\n".join([chunk['content'] for chunk in resume_chunks])
                         context_parts.append(f"Resume Information:\n{resume_context}")
+                        logger.info(f"Added resume context from embeddings for user {user_id}")
                     
-                    # Format profile context
-                    if profile_chunks:
-                        profile_context = "\n".join([chunk['content'] for chunk in profile_chunks])
-                        context_parts.append(f"Profile Information:\n{profile_context}")
+                    # Format profile context from embeddings (if different from direct profile)
+                    if embedding_profile_chunks:
+                        embedding_profile_context = "\n".join([chunk['content'] for chunk in embedding_profile_chunks])
+                        context_parts.append(f"Additional Profile Information:\n{embedding_profile_context}")
+                        logger.info(f"Added embedding profile context for user {user_id}")
                     
-                    logger.info(f"Retrieved {len(filtered_chunks)} context chunks for user {user_id} (resume: {len(resume_chunks)}, profile: {len(profile_chunks)})")
+                    logger.info(f"Retrieved {len(filtered_chunks)} context chunks for user {user_id} (resume: {len(resume_chunks)}, profile: {len(embedding_profile_chunks)})")
+                    
+                    # Debug logging
+                    if len(resume_chunks) == 0:
+                        logger.warning(f"No resume chunks found for user {user_id}. This might indicate the resume hasn't been uploaded or processed.")
                     
                 except Exception as e:
                     logger.warning(f"Comprehensive context search failed, falling back to resume-only: {e}")
@@ -156,17 +235,22 @@ class RAGChatService:
                             if filtered_resume_chunks:
                                 resume_context = "\n".join([chunk['content'] for chunk in filtered_resume_chunks])
                                 context_parts.append(f"Resume Information:\n{resume_context}")
+                                logger.info(f"Added resume context from fallback for user {user_id}")
                                 
                             logger.info(f"Retrieved {len(filtered_resume_chunks)} resume chunks for user {user_id}")
                             
                         except Exception as resume_error:
                             logger.error(f"Resume context search also failed: {resume_error}")
+            else:
+                logger.warning("Embedding service not available")
             
             # Format final context text
             if context_parts:
                 context_text = f"User Background Information:\n\n" + "\n\n".join(context_parts)
+                logger.info(f"Successfully created context for user {user_id} with {len(context_parts)} sections")
             else:
                 context_text = "No specific user background information available. Please ask the user to provide relevant details about their background, experience, and goals."
+                logger.warning(f"No context found for user {user_id}")
             
             return all_context_chunks, context_text
             
@@ -183,6 +267,10 @@ class RAGChatService:
 Key guidelines:
 - ALWAYS use the provided user background information to give personalized advice when available
 - Never ask users to re-share information that is already provided in their background
+- If you see profile information, resume content, or other background details, USE THEM immediately in your response
+- When a user asks about their strengths, weaknesses, or career advice, reference their specific background, education, experience, and goals
+- When analyzing their resume, provide specific examples from their actual experience, education, and skills
+- Never provide hypothetical examples when you have access to their real resume content
 - Be encouraging but realistic about career transitions and timelines
 - Provide specific, actionable steps when possible
 - Focus on practical skills, experiences, and strategies
@@ -190,7 +278,7 @@ Key guidelines:
 - Be supportive and understanding of career challenges
 - If background information is limited, ask targeted questions to fill specific gaps
 
-IMPORTANT: The user background information below contains their resume and profile data. Use this information to provide personalized responses without asking them to repeat what's already known about their experience, education, or goals."""
+CRITICAL: The user background information provided contains their actual resume content and profile data. You have access to their real experience, education, skills, and career history. You must reference and use this specific information in your responses. Do not ask them to provide information that is already available in their background context. When they ask you to analyze or critique their resume, use their actual resume content, not hypothetical examples."""
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", system_prompt),

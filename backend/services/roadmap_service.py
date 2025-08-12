@@ -389,34 +389,34 @@ User Background:
 Current Role: {request.current_role}
 Target Role: {request.target_role}
 
-Provide a detailed analysis in the following format:
+Provide a concise analysis in the following format:
 
 ROADMAP RATIONALE:
-[Provide a detailed 2-3 paragraph explanation of WHY this specific roadmap was created. Be very specific about what you found in their background/resume. For example: "Your current resume shows extensive full-stack web development experience with React and Node.js, but only minimal machine learning experience with just one PyTorch project. This roadmap focuses heavily on building ML fundamentals because..." Include specific technologies, projects, or experiences mentioned.]
+[Provide a 1-2 paragraph explanation of WHY this specific roadmap was created based on their background. Be specific about key technologies or experiences that influenced the roadmap design.]
 
 CURRENT STRENGTHS:
-- [Strength 1]: [Explanation of how this helps with the target role]
-- [Strength 2]: [Explanation of how this helps with the target role]
-- [Strength 3]: [Explanation of how this helps with the target role]
+- [Strength 1]: [Brief explanation]
+- [Strength 2]: [Brief explanation]
+- [Strength 3]: [Brief explanation]
 
 AREAS FOR IMPROVEMENT:
-- [Weakness/Gap 1]: [Why this is important for the target role]
-- [Weakness/Gap 2]: [Why this is important for the target role]
-- [Weakness/Gap 3]: [Why this is important for the target role]
+- [Gap 1]: [Why important for target role]
+- [Gap 2]: [Why important for target role]
+- [Gap 3]: [Why important for target role]
 
 KEY TRANSFERABLE SKILLS:
-- [Skill 1]: [How it applies to target role]
-- [Skill 2]: [How it applies to target role]
+- [Skill 1]: [How it applies]
+- [Skill 2]: [How it applies]
 
 BIGGEST CHALLENGES:
-- [Challenge 1]: [Impact and mitigation strategy]
-- [Challenge 2]: [Impact and mitigation strategy]
+- [Challenge 1]: [Brief mitigation approach]
+- [Challenge 2]: [Brief mitigation approach]
 
 COMPETITIVE ADVANTAGES:
-- [Advantage 1]: [Why this makes you stand out]
-- [Advantage 2]: [Why this makes you stand out]
+- [Advantage 1]: [Why this helps you stand out]
+- [Advantage 2]: [Why this helps you stand out]
 
-Be specific and actionable. Focus on skills, experience, and knowledge gaps that are most critical for success in the target role."""
+Keep explanations concise and actionable."""
 
             response = await self.ai_service.generate_text(
                 prompt=analysis_prompt,

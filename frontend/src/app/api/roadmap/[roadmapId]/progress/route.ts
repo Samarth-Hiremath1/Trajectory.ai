@@ -4,10 +4,10 @@ const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000'
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { roadmapId: string } }
+  { params }: { params: Promise<{ roadmapId: string }> }
 ) {
   try {
-    const { roadmapId } = params
+    const { roadmapId } = await params
     const progressData = await request.json()
 
     // Forward the request to the FastAPI backend

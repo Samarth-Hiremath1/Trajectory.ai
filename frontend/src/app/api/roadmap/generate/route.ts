@@ -19,6 +19,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Get user ID from request headers
+    const userIdHeader = request.headers.get('X-User-ID')
+    if (!userIdHeader) {
+      return NextResponse.json(
+        { 
+          success: false, 
+          error: 'User authentication required.',
+          code: '401',
+          retryable: false
+        },
+        { status: 401 }
+      )
+    }
+
     // Add timeout to prevent hanging requests
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 120000) // 2 minutes for AI generation
@@ -28,6 +42,7 @@ export async function POST(request: NextRequest) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'X-User-ID': userIdHeader,
       },
       body: JSON.stringify(body),
       signal: controller.signal,

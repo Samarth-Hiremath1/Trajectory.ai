@@ -122,22 +122,7 @@ export function DashboardStats({ user, profile }: DashboardStatsProps) {
           )}
         </div>
 
-        {/* Activity Stats */}
-        <div className="border-t pt-4">
-          <h4 className="font-medium text-gray-900 mb-2">Activity Summary</h4>
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <p className="text-gray-600">Roadmaps</p>
-              <p className="font-semibold text-indigo-600">{stats.totalRoadmaps} total</p>
-              <p className="text-xs text-gray-500">{stats.activeRoadmaps} active</p>
-            </div>
-            <div>
-              <p className="text-gray-600">Chat Sessions</p>
-              <p className="font-semibold text-green-600">{stats.totalChatSessions} total</p>
-              <p className="text-xs text-gray-500">Last: {formatLastActivity(stats.lastActivity)}</p>
-            </div>
-          </div>
-        </div>
+
 
         {/* Progress Indicator */}
         {stats.totalRoadmaps > 0 && (

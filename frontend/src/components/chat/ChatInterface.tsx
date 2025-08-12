@@ -22,6 +22,7 @@ export function ChatInterface({ className = '' }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<ChatMessageType[]>([])
   const [isTyping, setIsTyping] = useState(false)
   const [messageError, setMessageError] = useState<AppError | null>(null)
+  const [isRestoringSession, setIsRestoringSession] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -30,6 +31,24 @@ export function ChatInterface({ className = '' }: ChatInterfaceProps) {
     async () => {
       if (!user) throw new Error('User not authenticated')
 
+      // First try to get existing active session for the user
+      try {
+        const existingSessionResponse = await fetch(`/api/chat/users/${user.id}/sessions`)
+        if (existingSessionResponse.ok) {
+          const existingSessions = await existingSessionResponse.json()
+          if (existingSessions.sessions && existingSessions.sessions.length > 0) {
+            // Use the most recent active session
+            const activeSession = existingSessions.sessions.find((s: any) => s.session.is_active) || existingSessions.sessions[0]
+            if (activeSession) {
+              return activeSession.session
+            }
+          }
+        }
+      } catch (error) {
+        console.log('No existing sessions found, creating new one')
+      }
+
+      // Create new session if no existing session found
       const response = await fetch('/api/chat/sessions', {
         method: 'POST',
         headers: {
@@ -37,7 +56,7 @@ export function ChatInterface({ className = '' }: ChatInterfaceProps) {
         },
         body: JSON.stringify({
           user_id: user.id,
-          title: 'Career Chat Session'
+          title: 'AI Mentor Chat Session'
         }),
       })
 
@@ -53,6 +72,10 @@ export function ChatInterface({ className = '' }: ChatInterfaceProps) {
       onSuccess: (newSession: ChatSession) => {
         setSession(newSession)
         setMessages(newSession.messages || [])
+        // Store session ID in sessionStorage for persistence across tab switches
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem('ai-mentor-session-id', newSession.id)
+        }
       }
     }
   )
@@ -104,12 +127,40 @@ export function ChatInterface({ className = '' }: ChatInterfaceProps) {
     scrollToBottom()
   }, [messages])
 
-  // Initialize chat session
+  // Initialize chat session with persistence check
   useEffect(() => {
-    if (user && !session && !initializeChatOp.loading) {
-      initializeChatOp.execute()
+    if (user && !session && !initializeChatOp.loading && !isRestoringSession) {
+      // Check if we have a stored session ID from previous tab visits
+      const storedSessionId = typeof window !== 'undefined' ? sessionStorage.getItem('ai-mentor-session-id') : null
+      
+      if (storedSessionId) {
+        // Try to restore the existing session
+        const restoreSession = async () => {
+          setIsRestoringSession(true)
+          try {
+            const response = await fetch(`/api/chat/sessions/${storedSessionId}`)
+            if (response.ok) {
+              const existingSession = await response.json()
+              setSession(existingSession)
+              setMessages(existingSession.messages || [])
+              setIsRestoringSession(false)
+              return
+            }
+          } catch (error) {
+            console.log('Failed to restore session, creating new one')
+            // Clear invalid session ID
+            sessionStorage.removeItem('ai-mentor-session-id')
+          }
+          setIsRestoringSession(false)
+          // If restore fails, initialize new session
+          initializeChatOp.execute()
+        }
+        restoreSession()
+      } else {
+        initializeChatOp.execute()
+      }
     }
-  }, [user, session, initializeChatOp])
+  }, [user, session, initializeChatOp, isRestoringSession])
 
   // Polling for new messages (simple real-time implementation)
   useEffect(() => {
@@ -194,11 +245,27 @@ export function ChatInterface({ className = '' }: ChatInterfaceProps) {
     }
   }
 
-  // Show loading state during initialization
-  if (initializeChatOp.loading) {
+  // Show loading state during initialization or session restoration
+  if (initializeChatOp.loading || isRestoringSession) {
     return (
-      <div className={className}>
-        <ChatLoadingState />
+      <div className={`flex flex-col h-full ${className}`}>
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white">
+          <h3 className="text-lg font-semibold text-gray-900">AI Career Mentor</h3>
+          <div className="flex items-center space-x-2">
+            <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
+            <span className="text-sm text-gray-600">
+              {isRestoringSession ? 'Restoring session...' : 'Connecting...'}
+            </span>
+          </div>
+        </div>
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <ChatLoadingState />
+            <p className="mt-4 text-sm text-gray-600">
+              {isRestoringSession ? 'Restoring your previous conversation' : 'Initializing AI mentor'}
+            </p>
+          </div>
+        </div>
       </div>
     )
   }
@@ -206,27 +273,45 @@ export function ChatInterface({ className = '' }: ChatInterfaceProps) {
   // Show error state if initialization failed
   if (initializeChatOp.error) {
     return (
-      <div className={className}>
-        <ErrorDisplay
-          error={initializeChatOp.error}
-          onRetry={initializeChatOp.retry}
-          variant="inline"
-        />
+      <div className={`flex flex-col h-full ${className}`}>
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white">
+          <h3 className="text-lg font-semibold text-gray-900">AI Career Mentor</h3>
+          <div className="flex items-center space-x-2">
+            <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+            <span className="text-sm text-gray-600">Offline</span>
+          </div>
+        </div>
+        <div className="flex-1 flex items-center justify-center p-4">
+          <ErrorDisplay
+            error={initializeChatOp.error}
+            onRetry={initializeChatOp.retry}
+            variant="inline"
+          />
+        </div>
       </div>
     )
   }
 
   if (!session) {
     return (
-      <div className={`flex items-center justify-center h-96 ${className}`}>
-        <div className="text-center">
-          <p className="text-gray-600 mb-4">No chat session available</p>
-          <button
-            onClick={initializeChatOp.retry}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm"
-          >
-            Initialize Chat
-          </button>
+      <div className={`flex flex-col h-full ${className}`}>
+        <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-white">
+          <h3 className="text-lg font-semibold text-gray-900">AI Career Mentor</h3>
+          <div className="flex items-center space-x-2">
+            <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
+            <span className="text-sm text-gray-600">Disconnected</span>
+          </div>
+        </div>
+        <div className="flex-1 flex items-center justify-center p-4">
+          <div className="text-center">
+            <p className="text-gray-600 mb-4">No chat session available</p>
+            <button
+              onClick={initializeChatOp.retry}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-md text-sm transition-colors"
+            >
+              Initialize Chat
+            </button>
+          </div>
         </div>
       </div>
     )

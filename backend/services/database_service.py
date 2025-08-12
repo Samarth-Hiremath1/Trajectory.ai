@@ -427,3 +427,109 @@ class DatabaseService:
         except Exception as e:
             logger.error(f"Error deleting profile for user {user_id}: {str(e)}")
             raise
+    
+    # Resume operations
+    async def save_resume(self, resume_data: Dict[str, Any]) -> str:
+        """Save resume data to the database"""
+        try:
+            # Convert string user_id to UUID format if needed
+            user_id = self._convert_user_id_to_uuid(resume_data["user_id"])
+            
+            # Prepare resume data for database
+            db_data = {
+                "id": resume_data.get("id", str(uuid.uuid4())),
+                "user_id": user_id,
+                "filename": resume_data["filename"],
+                "file_path": resume_data.get("file_path"),
+                "file_size": resume_data.get("file_size"),
+                "content_type": resume_data.get("content_type", "application/pdf"),
+                "parsed_content": resume_data.get("parsed_content", {}),
+                "text_chunks": resume_data.get("text_chunks", []),
+                "processing_status": resume_data.get("processing_status", "completed"),
+                "error_message": resume_data.get("error_message"),
+                "upload_date": resume_data.get("upload_date", datetime.utcnow().isoformat()),
+                "processed_date": resume_data.get("processed_date", datetime.utcnow().isoformat())
+            }
+            
+            # Use upsert to handle updates to existing resumes
+            result = self.supabase.table("resumes").upsert(db_data, on_conflict="user_id").execute()
+            
+            if result.data:
+                resume_id = result.data[0]["id"]
+                logger.info(f"Saved resume {resume_id} for user {user_id}")
+                return resume_id
+            
+            raise Exception("No data returned from resume save operation")
+            
+        except Exception as e:
+            logger.error(f"Error saving resume: {str(e)}")
+            raise
+    
+    async def get_user_resume(self, user_id: str) -> Optional[Dict[str, Any]]:
+        """Get user's resume by user ID"""
+        try:
+            result = self.supabase.table("resumes").select("*").eq("user_id", user_id).execute()
+            
+            if result.data:
+                return result.data[0]
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error getting resume for user {user_id}: {str(e)}")
+            raise
+    
+    async def get_resume_by_id(self, resume_id: str) -> Optional[Dict[str, Any]]:
+        """Get resume by resume ID"""
+        try:
+            result = self.supabase.table("resumes").select("*").eq("id", resume_id).execute()
+            
+            if result.data:
+                return result.data[0]
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error getting resume {resume_id}: {str(e)}")
+            raise
+    
+    async def update_resume_status(self, resume_id: str, status: str, error_message: Optional[str] = None) -> bool:
+        """Update resume processing status"""
+        try:
+            update_data = {
+                "processing_status": status,
+                "updated_at": datetime.utcnow().isoformat()
+            }
+            
+            if error_message:
+                update_data["error_message"] = error_message
+            
+            if status == "completed":
+                update_data["processed_date"] = datetime.utcnow().isoformat()
+            
+            result = self.supabase.table("resumes").update(update_data).eq("id", resume_id).execute()
+            
+            if result.data:
+                logger.info(f"Updated resume {resume_id} status to {status}")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error updating resume status: {str(e)}")
+            raise
+    
+    async def delete_user_resume(self, user_id: str) -> bool:
+        """Delete user's resume"""
+        try:
+            result = self.supabase.table("resumes").delete().eq("user_id", user_id).execute()
+            
+            if result.data:
+                logger.info(f"Deleted resume for user {user_id}")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error deleting resume for user {user_id}: {str(e)}")
+            raise

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useAuth } from '@/lib/auth-context'
 import { RoadmapRequest, CareerSuggestion, RoadmapGenerationResponse } from '@/types/roadmap'
 import { ApiErrorBoundary } from '@/components/error/ApiErrorBoundary'
 import { ErrorDisplay } from '@/components/ui/ErrorDisplay'
@@ -19,6 +20,7 @@ export function RoadmapGenerator({
   currentRole = '', 
   targetRoles = [] 
 }: RoadmapGeneratorProps) {
+  const { user } = useAuth()
   const [formData, setFormData] = useState<RoadmapRequest>({
     current_role: currentRole,
     target_role: targetRoles[0] || '',
@@ -37,8 +39,15 @@ export function RoadmapGenerator({
     async () => {
       if (!formData.current_role.trim()) return { suggestions: [] }
 
+      if (!user?.id) throw new Error('User not authenticated')
+
       const response = await fetch(
-        `/api/roadmap/suggestions/${encodeURIComponent(formData.current_role)}?user_background=${encodeURIComponent(formData.user_background || '')}`
+        `/api/roadmap/suggestions/${encodeURIComponent(formData.current_role)}?user_background=${encodeURIComponent(formData.user_background || '')}`,
+        {
+          headers: {
+            'X-User-ID': user.id,
+          }
+        }
       )
       
       if (!response.ok) {
@@ -63,10 +72,13 @@ export function RoadmapGenerator({
         throw new Error('Please fill in both current and target roles')
       }
 
+      if (!user?.id) throw new Error('User not authenticated')
+
       const response = await fetch('/api/roadmap/generate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'X-User-ID': user.id,
         },
         body: JSON.stringify(formData)
       })
