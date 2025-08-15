@@ -238,3 +238,13 @@
   - Implement export functionality from roadmaps to populate calendar and to-do list
   - Keep clear all tasks button functionality
   - _Requirements: 6.1, 6.2, 6.3, 6.4_
+
+- [x] 31. Enhanced roadmap generation with proper constraint consideration and flexible milestone counts
+  - Updated roadmap generation prompt to emphasize user constraints in timeline, resource recommendations, and milestone planning
+  - Enhanced strengths/weaknesses analysis to reference user constraints, focus areas, and timeline preferences in the rationale
+  - Implemented flexible milestone count system (3-5+ milestones per phase) based on phase duration and complexity instead of fixed 3 milestones
+  - Added _calculate_target_milestone_count method to determine appropriate milestone count based on phase characteristics
+  - Updated roadmap generation to properly consider user constraints when creating phase timelines and resource recommendations
+  - Ensured constraints are prominently featured in roadmap rationale and analysis sections
+  - Tested both backend service and API endpoint to verify proper functionality
+  - _Requirements: Enhanced user experience with personalized, constraint-aware roadmap generation_

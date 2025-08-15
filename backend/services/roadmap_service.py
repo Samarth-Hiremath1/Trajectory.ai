@@ -53,6 +53,7 @@ class RoadmapService:
         user_background: str,
         timeline_preference: Optional[str] = None,
         focus_areas: List[str] = None,
+        constraints: List[str] = None,
         learning_resources: List[LearningResource] = None
     ) -> str:
         """Create LangChain-style prompt for roadmap generation"""
@@ -79,6 +80,14 @@ class RoadmapService:
         if timeline_preference:
             timeline_context = f"\n\nPreferred Timeline: {timeline_preference}"
         
+        # Build constraints context with emphasis
+        constraints_context = ""
+        if constraints:
+            constraints_context = f"\n\nIMPORTANT CONSTRAINTS TO CONSIDER:\n"
+            for constraint in constraints:
+                constraints_context += f"- {constraint}\n"
+            constraints_context += "These constraints MUST be reflected in the roadmap design, timeline, and milestone planning."
+
         prompt = f"""You are an expert career advisor creating a detailed, actionable career roadmap. 
 Create a structured transition plan from {current_role} to {target_role}.
 
@@ -86,53 +95,58 @@ User Background:
 {user_background}
 {timeline_context}
 {focus_context}
+{constraints_context}
 {resource_context}
 
 Create a roadmap with the following structure:
 
 ROADMAP TITLE: [Create a compelling title]
 
-OVERVIEW: [2-3 sentence summary of the transition strategy]
+OVERVIEW: [2-3 sentence summary of the transition strategy, considering user constraints and focus areas]
 
 PHASE 1: [Phase Title]
-Duration: [X weeks]
-Description: [What this phase accomplishes]
+Duration: [X weeks - adjust based on user constraints and timeline preference]
+Description: [What this phase accomplishes, considering user constraints]
 Skills to Develop:
 - [Skill 1]: [Current level] → [Target level] ([Priority 1-5])
 - [Skill 2]: [Current level] → [Target level] ([Priority 1-5])
 Learning Resources:
 - [Resource 1]: [Description] ([Duration])
 - [Resource 2]: [Description] ([Duration])
-Milestones (MUST HAVE EXACTLY 3 MILESTONES):
-- Week [X]: [Milestone title] - [Detailed description with specific steps, estimated time (e.g., 10-15 hours), and success criteria. Include specific links to courses, tutorials, or resources when applicable]
-- Week [Y]: [Milestone title] - [Detailed description with specific steps, estimated time, and success criteria. Include specific links to courses, tutorials, or resources when applicable]
-- Week [Z]: [Milestone title] - [Detailed description with specific steps, estimated time, and success criteria. Include specific links to courses, tutorials, or resources when applicable]
-Prerequisites: [What's needed before starting]
+Milestones (3-5 MILESTONES RECOMMENDED):
+- Week [X]: [Milestone title] - [Detailed description with specific steps, estimated time (e.g., 10-15 hours), and success criteria. Include specific links to courses, tutorials, or resources when applicable. Consider user constraints in time estimates.]
+- Week [Y]: [Milestone title] - [Detailed description with specific steps, estimated time, and success criteria. Include specific links to courses, tutorials, or resources when applicable. Consider user constraints in time estimates.]
+- Week [Z]: [Milestone title] - [Detailed description with specific steps, estimated time, and success criteria. Include specific links to courses, tutorials, or resources when applicable. Consider user constraints in time estimates.]
+[Add 1-2 more milestones if the phase duration and complexity warrant it]
+Prerequisites: [What's needed before starting, considering user constraints]
 Outcomes: [What you'll achieve after completion]
 
 PHASE 2: [Phase Title]
-[Same structure as Phase 1 - MUST HAVE EXACTLY 3 MILESTONES]
+[Same structure as Phase 1 - 3-5 MILESTONES RECOMMENDED based on phase complexity]
 
-[Continue for 3-6 phases total - EACH PHASE MUST HAVE EXACTLY 3 MILESTONES]
+[Continue for 3-6 phases total - EACH PHASE SHOULD HAVE 3-5 MILESTONES based on complexity and duration]
 
-TOTAL TIMELINE: [X weeks/months]
+TOTAL TIMELINE: [X weeks/months - must align with user timeline preference and constraints]
 
 KEY SUCCESS FACTORS:
-- [Factor 1]
-- [Factor 2]
-- [Factor 3]
+- [Factor 1 - consider user constraints]
+- [Factor 2 - consider user focus areas]
+- [Factor 3 - consider user background]
 
 POTENTIAL CHALLENGES:
-- [Challenge 1]: [Mitigation strategy]
-- [Challenge 2]: [Mitigation strategy]
+- [Challenge 1]: [Mitigation strategy considering user constraints]
+- [Challenge 2]: [Mitigation strategy considering user constraints]
 
 CRITICAL REQUIREMENTS:
-- Each phase MUST have exactly 3 milestones
+- Each phase should have 3-5 milestones based on complexity and duration
 - Each milestone MUST include detailed steps, estimated time commitment, and specific resources/links
 - Include real course names, tutorial links, and specific tools/technologies
 - Make milestones actionable with clear deliverables
 - Ensure each phase builds logically on the previous one
-- Reference specific technologies, frameworks, and industry standards relevant to the target role"""
+- Reference specific technologies, frameworks, and industry standards relevant to the target role
+- ALWAYS consider and accommodate user constraints in timeline, resource recommendations, and time estimates
+- Tailor the roadmap to user's focus areas and background experience
+- Adjust milestone complexity and number based on phase duration and user constraints"""
 
         return prompt
     
@@ -440,42 +454,55 @@ CRITICAL REQUIREMENTS:
                 if resume_context:
                     context_text += f"\n\nResume Summary: {resume_context}"
             
+            # Build additional context for analysis
+            focus_areas_text = ""
+            if request.focus_areas:
+                focus_areas_text = f"\nFocus Areas: {', '.join(request.focus_areas)}"
+            
+            constraints_text = ""
+            if request.constraints:
+                constraints_text = f"\nConstraints: {', '.join(request.constraints)}"
+            
+            timeline_text = ""
+            if request.timeline_preference:
+                timeline_text = f"\nTimeline Preference: {request.timeline_preference}"
+
             analysis_prompt = f"""Analyze the user's current strengths and weaknesses for transitioning from {request.current_role} to {request.target_role}.
 
 User Background:
 {context_text}
 
 Current Role: {request.current_role}
-Target Role: {request.target_role}
+Target Role: {request.target_role}{timeline_text}{focus_areas_text}{constraints_text}
 
 Provide a concise analysis in the following format:
 
 ROADMAP RATIONALE:
-[Provide a 1-2 paragraph explanation of WHY this specific roadmap was created based on their background. Be specific about key technologies or experiences that influenced the roadmap design.]
+[Provide a 1-2 paragraph explanation of WHY this specific roadmap was created based on their background, focus areas, constraints, and timeline preference. Be specific about key technologies or experiences that influenced the roadmap design. Explain how the roadmap addresses their constraints and emphasizes their focus areas.]
 
 CURRENT STRENGTHS:
-- [Strength 1]: [Brief explanation]
-- [Strength 2]: [Brief explanation]
-- [Strength 3]: [Brief explanation]
+- [Strength 1]: [Brief explanation, considering how it relates to focus areas]
+- [Strength 2]: [Brief explanation, considering how it relates to focus areas]
+- [Strength 3]: [Brief explanation, considering how it relates to focus areas]
 
 AREAS FOR IMPROVEMENT:
-- [Gap 1]: [Why important for target role]
-- [Gap 2]: [Why important for target role]
-- [Gap 3]: [Why important for target role]
+- [Gap 1]: [Why important for target role, considering focus areas]
+- [Gap 2]: [Why important for target role, considering focus areas]
+- [Gap 3]: [Why important for target role, considering focus areas]
 
 KEY TRANSFERABLE SKILLS:
-- [Skill 1]: [How it applies]
-- [Skill 2]: [How it applies]
+- [Skill 1]: [How it applies to target role and focus areas]
+- [Skill 2]: [How it applies to target role and focus areas]
 
 BIGGEST CHALLENGES:
-- [Challenge 1]: [Brief mitigation approach]
-- [Challenge 2]: [Brief mitigation approach]
+- [Challenge 1]: [Brief mitigation approach considering user constraints]
+- [Challenge 2]: [Brief mitigation approach considering user constraints]
 
 COMPETITIVE ADVANTAGES:
-- [Advantage 1]: [Why this helps you stand out]
-- [Advantage 2]: [Why this helps you stand out]
+- [Advantage 1]: [Why this helps you stand out in the target role]
+- [Advantage 2]: [Why this helps you stand out in the target role]
 
-Keep explanations concise and actionable."""
+Keep explanations concise and actionable. Always reference the user's constraints and focus areas where relevant."""
 
             response = await self.ai_service.generate_text(
                 prompt=analysis_prompt,
@@ -592,6 +619,7 @@ Keep explanations concise and actionable."""
                 user_background=enhanced_background,
                 timeline_preference=request.timeline_preference,
                 focus_areas=request.focus_areas,
+                constraints=request.constraints,
                 learning_resources=learning_resources
             )
             
@@ -636,13 +664,39 @@ Keep explanations concise and actionable."""
                 generation_time_seconds=generation_time
             )
     
+    def _calculate_target_milestone_count(self, phase: RoadmapPhase) -> int:
+        """Calculate the target number of milestones for a phase based on duration and complexity"""
+        
+        # Base milestone count on phase duration
+        if phase.duration_weeks <= 2:
+            base_count = 3  # Short phases get minimum 3 milestones
+        elif phase.duration_weeks <= 4:
+            base_count = 4  # Medium phases get 4 milestones
+        elif phase.duration_weeks <= 8:
+            base_count = 5  # Longer phases get 5 milestones
+        else:
+            base_count = 6  # Very long phases get 6+ milestones
+        
+        # Adjust based on complexity (number of skills to develop)
+        skill_count = len(phase.skills_to_develop)
+        if skill_count > 5:
+            base_count += 1  # Add extra milestone for complex phases
+        elif skill_count < 2:
+            base_count = max(3, base_count - 1)  # Reduce for simple phases, but keep minimum of 3
+        
+        # Ensure we stay within reasonable bounds (3-7 milestones)
+        return max(3, min(7, base_count))
+
     async def _ensure_minimum_milestones(self, roadmap: Roadmap):
-        """Ensure each phase has at least 3 milestones, generate additional ones if needed"""
+        """Ensure each phase has appropriate number of milestones (3-7 based on complexity), generate additional ones if needed"""
         
         for phase in roadmap.phases:
-            if len(phase.milestones) < 3:
+            # Determine target milestone count based on phase duration and complexity
+            target_milestone_count = self._calculate_target_milestone_count(phase)
+            
+            if len(phase.milestones) < target_milestone_count:
                 # Generate additional milestones for this phase
-                missing_count = 3 - len(phase.milestones)
+                missing_count = target_milestone_count - len(phase.milestones)
                 
                 try:
                     additional_milestones_prompt = f"""Generate {missing_count} additional detailed milestones for this phase:
@@ -699,6 +753,8 @@ Only provide the milestone entries, no additional text."""
                             deliverables=[f"Week {week} progress report"]
                         )
                         phase.milestones.append(fallback_milestone)
+                    
+                    logger.info(f"Added {missing_count} fallback milestones to phase {phase.phase_number} (target: {target_milestone_count})")
 
     def _enhance_roadmap_with_resources(self, roadmap: Roadmap, scraped_resources: List[LearningResource]):
         """Enhance roadmap phases with scraped learning resources"""
