@@ -10,23 +10,24 @@ interface CalendarEvent {
   type: 'milestone' | 'learning' | 'practice' | 'review'
   description?: string
   completed?: boolean
+  skipped?: boolean
   roadmapId?: string
   phaseNumber?: number
 }
 
-interface CalendarComponentProps {
+interface SimpleCalendarComponentProps {
   events: CalendarEvent[]
   onEventClick?: (event: CalendarEvent) => void
   onDateClick?: (date: Date) => void
   onEventComplete?: (eventId: string) => void
 }
 
-export function CalendarComponent({ 
+export function SimpleCalendarComponent({ 
   events, 
   onEventClick, 
   onDateClick, 
-  onEventComplete 
-}: CalendarComponentProps) {
+  onEventComplete
+}: SimpleCalendarComponentProps) {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
 
@@ -84,6 +85,12 @@ export function CalendarComponent({
     onDateClick?.(date)
   }
 
+  const handleEventClick = (event: CalendarEvent, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setSelectedDate(event.date)
+    onEventClick?.(event)
+  }
+
   const getEventTypeColor = (type: CalendarEvent['type']) => {
     switch (type) {
       case 'milestone':
@@ -107,8 +114,8 @@ export function CalendarComponent({
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <div className="flex items-center justify-between mb-6">
+    <div className="bg-white rounded-lg shadow p-6 h-full flex flex-col">
+      <div className="flex items-center justify-between mb-6 flex-shrink-0">
         <h3 className="text-lg font-semibold text-gray-900">
           Career Development Calendar
         </h3>
@@ -132,7 +139,7 @@ export function CalendarComponent({
       </div>
 
       {/* Calendar Grid */}
-      <div className="grid grid-cols-7 gap-1 mb-4">
+      <div className="grid grid-cols-7 gap-1 mb-4 flex-shrink-0">
         {/* Day headers */}
         {dayNames.map(day => (
           <div key={day} className="p-2 text-center text-sm font-medium text-gray-500">
@@ -169,13 +176,10 @@ export function CalendarComponent({
                 {dayEvents.slice(0, 2).map(event => (
                   <div
                     key={event.id}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onEventClick?.(event)
-                    }}
-                    className={`text-xs px-1 py-0.5 rounded text-white truncate ${
+                    onClick={(e) => handleEventClick(event, e)}
+                    className={`text-xs px-1 py-0.5 rounded text-white truncate cursor-pointer hover:opacity-80 ${
                       getEventTypeColor(event.type)
-                    } ${event.completed ? 'opacity-50 line-through' : ''}`}
+                    } ${event.completed || event.skipped ? 'opacity-50 line-through' : ''}`}
                     title={event.title}
                   >
                     {event.title}
@@ -194,7 +198,7 @@ export function CalendarComponent({
 
       {/* Selected date events */}
       {selectedDate && (
-        <div className="border-t pt-4">
+        <div className="border-t pt-4 flex-1 overflow-y-auto">
           <h4 className="font-medium text-gray-900 mb-3">
             Events for {selectedDate.toLocaleDateString()}
           </h4>
@@ -203,13 +207,13 @@ export function CalendarComponent({
               <div
                 key={event.id}
                 className={`flex items-center justify-between p-3 border rounded-lg ${
-                  event.completed ? 'bg-gray-50 opacity-75' : 'bg-white'
+                  event.completed || event.skipped ? 'bg-gray-50 opacity-75' : 'bg-white'
                 }`}
               >
                 <div className="flex items-center space-x-3">
                   <div className={`w-3 h-3 rounded-full ${getEventTypeColor(event.type)}`}></div>
                   <div>
-                    <p className={`font-medium ${event.completed ? 'line-through text-gray-500' : 'text-gray-900'}`}>
+                    <p className={`font-medium ${event.completed || event.skipped ? 'line-through text-gray-500' : 'text-gray-900'}`}>
                       {event.title}
                     </p>
                     {event.description && (
@@ -218,13 +222,23 @@ export function CalendarComponent({
                   </div>
                 </div>
                 <div className="flex items-center space-x-2">
-                  {!event.completed && onEventComplete && (
+                  {!event.completed && !event.skipped && onEventComplete && (
                     <button
                       onClick={() => onEventComplete(event.id)}
                       className="text-sm bg-green-100 hover:bg-green-200 text-green-700 px-2 py-1 rounded"
                     >
                       Complete
                     </button>
+                  )}
+                  {event.completed && (
+                    <span className="text-sm text-green-600 font-medium">
+                      ✓ Completed
+                    </span>
+                  )}
+                  {event.skipped && (
+                    <span className="text-sm text-gray-600 font-medium">
+                      ⊘ Skipped
+                    </span>
                   )}
                   <button
                     onClick={() => onEventClick?.(event)}
@@ -242,28 +256,7 @@ export function CalendarComponent({
         </div>
       )}
 
-      {/* Legend */}
-      <div className="border-t pt-4 mt-4">
-        <h4 className="font-medium text-gray-900 mb-2">Event Types</h4>
-        <div className="flex flex-wrap gap-4 text-sm">
-          <div className="flex items-center space-x-2">
-            <div className="w-3 h-3 rounded-full bg-red-500"></div>
-            <span>Milestones</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-            <span>Learning</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <div className="w-3 h-3 rounded-full bg-green-500"></div>
-            <span>Practice</span>
-          </div>
-          <div className="flex items-center space-x-2">
-            <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-            <span>Review</span>
-          </div>
-        </div>
-      </div>
+
     </div>
   )
 }

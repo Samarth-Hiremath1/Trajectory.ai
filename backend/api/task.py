@@ -7,11 +7,11 @@ from fastapi import APIRouter, HTTPException, Query, Depends
 from typing import List, Optional
 from datetime import datetime, timedelta
 
-from backend.models.task import (
+from models.task import (
     Task, TaskCreate, TaskUpdate, TaskFilter, TaskStats, TaskResponse,
     TaskStatus, TaskPriority, TaskType
 )
-from backend.services.task_service import TaskService
+from services.task_service import TaskService
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 task_service = TaskService()

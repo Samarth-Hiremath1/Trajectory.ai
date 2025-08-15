@@ -103,16 +103,17 @@ Skills to Develop:
 Learning Resources:
 - [Resource 1]: [Description] ([Duration])
 - [Resource 2]: [Description] ([Duration])
-Milestones:
-- Week [X]: [Milestone title] - [Success criteria]
-- Week [Y]: [Milestone title] - [Success criteria]
+Milestones (MUST HAVE EXACTLY 3 MILESTONES):
+- Week [X]: [Milestone title] - [Detailed description with specific steps, estimated time (e.g., 10-15 hours), and success criteria. Include specific links to courses, tutorials, or resources when applicable]
+- Week [Y]: [Milestone title] - [Detailed description with specific steps, estimated time, and success criteria. Include specific links to courses, tutorials, or resources when applicable]
+- Week [Z]: [Milestone title] - [Detailed description with specific steps, estimated time, and success criteria. Include specific links to courses, tutorials, or resources when applicable]
 Prerequisites: [What's needed before starting]
 Outcomes: [What you'll achieve after completion]
 
 PHASE 2: [Phase Title]
-[Same structure as Phase 1]
+[Same structure as Phase 1 - MUST HAVE EXACTLY 3 MILESTONES]
 
-[Continue for 3-6 phases total]
+[Continue for 3-6 phases total - EACH PHASE MUST HAVE EXACTLY 3 MILESTONES]
 
 TOTAL TIMELINE: [X weeks/months]
 
@@ -125,9 +126,13 @@ POTENTIAL CHALLENGES:
 - [Challenge 1]: [Mitigation strategy]
 - [Challenge 2]: [Mitigation strategy]
 
-Make the roadmap specific, actionable, and realistic. Include concrete deliverables and measurable milestones. 
-Reference specific technologies, frameworks, and industry standards relevant to the target role.
-Ensure each phase builds logically on the previous one."""
+CRITICAL REQUIREMENTS:
+- Each phase MUST have exactly 3 milestones
+- Each milestone MUST include detailed steps, estimated time commitment, and specific resources/links
+- Include real course names, tutorial links, and specific tools/technologies
+- Make milestones actionable with clear deliverables
+- Ensure each phase builds logically on the previous one
+- Reference specific technologies, frameworks, and industry standards relevant to the target role"""
 
         return prompt
     
@@ -296,38 +301,92 @@ Ensure each phase builds logically on the previous one."""
                     description=description,
                     duration=duration,
                     resource_type=ResourceType.COURSE,
-                    provider="Recommended"
+                    provider=""
                 )
                 resources.append(resource)
         
         return resources
     
     def _extract_milestones_from_content(self, content: str) -> List[Milestone]:
-        """Extract milestones from phase content"""
+        """Extract milestones from phase content with detailed descriptions"""
         milestones = []
         
         # Find milestones section
-        milestones_match = re.search(r'Milestones:\s*(.+?)(?=\nPrerequisites:|$)', content, re.IGNORECASE | re.DOTALL)
+        milestones_match = re.search(r'Milestones.*?:\s*(.+?)(?=\nPrerequisites:|$)', content, re.IGNORECASE | re.DOTALL)
         if not milestones_match:
             return milestones
         
         milestones_text = milestones_match.group(1)
         
-        # Parse individual milestones
-        milestone_lines = [line.strip() for line in milestones_text.split('\n') if line.strip().startswith('-')]
+        # Split by milestone markers (- Week X:)
+        milestone_sections = re.split(r'(?=- Week \d+:)', milestones_text)
         
-        for line in milestone_lines:
-            # Parse format: - Week X: Milestone title - Success criteria
-            milestone_match = re.search(r'-\s*Week\s*(\d+):\s*([^-]+)\s*-\s*(.+)', line, re.IGNORECASE)
+        for section in milestone_sections:
+            section = section.strip()
+            if not section or not section.startswith('- Week'):
+                continue
+                
+            # Parse format: - Week X: Milestone title - Detailed description...
+            milestone_match = re.search(r'- Week\s*(\d+):\s*([^-]+)\s*-\s*(.+)', section, re.IGNORECASE | re.DOTALL)
             if milestone_match:
                 week = int(milestone_match.group(1))
                 title = milestone_match.group(2).strip()
-                criteria = milestone_match.group(3).strip()
+                full_description = milestone_match.group(3).strip()
+                
+                # Extract links from description
+                links = re.findall(r'https?://[^\s\)]+', full_description)
+                
+                # Extract estimated time if mentioned
+                time_match = re.search(r'(\d+[-–]\d+|\d+)\s*hours?', full_description, re.IGNORECASE)
+                estimated_hours = time_match.group(1) if time_match else None
+                
+                # Split description into main description and success criteria
+                # Look for patterns like "Success criteria:", "You will:", "Deliverables:", etc.
+                criteria_patterns = [
+                    r'Success criteria?:\s*(.+?)(?=\n|$)',
+                    r'You will:\s*(.+?)(?=\n|$)',
+                    r'Deliverables?:\s*(.+?)(?=\n|$)',
+                    r'Complete when:\s*(.+?)(?=\n|$)'
+                ]
+                
+                success_criteria = []
+                description = full_description
+                
+                for pattern in criteria_patterns:
+                    criteria_match = re.search(pattern, full_description, re.IGNORECASE | re.DOTALL)
+                    if criteria_match:
+                        criteria_text = criteria_match.group(1).strip()
+                        # Split by common delimiters
+                        criteria_items = [item.strip() for item in re.split(r'[,;]|\sand\s', criteria_text) if item.strip()]
+                        success_criteria.extend(criteria_items)
+                        # Remove criteria from description
+                        description = re.sub(pattern, '', description, flags=re.IGNORECASE | re.DOTALL).strip()
+                        break
+                
+                # If no explicit success criteria found, use the full description as one criterion
+                if not success_criteria:
+                    success_criteria = [full_description]
+                
+                # Create deliverables from description if mentioned
+                deliverables = []
+                deliverable_patterns = [
+                    r'build\s+([^,.]+)',
+                    r'create\s+([^,.]+)',
+                    r'develop\s+([^,.]+)',
+                    r'implement\s+([^,.]+)',
+                    r'complete\s+([^,.]+)'
+                ]
+                
+                for pattern in deliverable_patterns:
+                    matches = re.findall(pattern, description, re.IGNORECASE)
+                    deliverables.extend([match.strip() for match in matches])
                 
                 milestone = Milestone(
                     title=title,
+                    description=description,
                     estimated_completion_weeks=week,
-                    success_criteria=[criteria]
+                    success_criteria=success_criteria[:3],  # Limit to 3 criteria
+                    deliverables=deliverables[:2] if deliverables else []  # Limit to 2 deliverables
                 )
                 milestones.append(milestone)
         
@@ -549,6 +608,9 @@ Keep explanations concise and actionable."""
             roadmap.user_id = user_id
             roadmap.generation_prompt = prompt[:500] + "..." if len(prompt) > 500 else prompt
             
+            # Ensure each phase has at least 3 milestones
+            await self._ensure_minimum_milestones(roadmap)
+            
             # Enhance with scraped learning resources
             self._enhance_roadmap_with_resources(roadmap, learning_resources)
             
@@ -574,6 +636,70 @@ Keep explanations concise and actionable."""
                 generation_time_seconds=generation_time
             )
     
+    async def _ensure_minimum_milestones(self, roadmap: Roadmap):
+        """Ensure each phase has at least 3 milestones, generate additional ones if needed"""
+        
+        for phase in roadmap.phases:
+            if len(phase.milestones) < 3:
+                # Generate additional milestones for this phase
+                missing_count = 3 - len(phase.milestones)
+                
+                try:
+                    additional_milestones_prompt = f"""Generate {missing_count} additional detailed milestones for this phase:
+
+Phase: {phase.title}
+Description: {phase.description}
+Duration: {phase.duration_weeks} weeks
+Skills to develop: {', '.join([skill.name for skill in phase.skills_to_develop])}
+
+Existing milestones:
+{chr(10).join([f"- Week {m.estimated_completion_weeks}: {m.title}" for m in phase.milestones])}
+
+Generate {missing_count} new milestones that:
+1. Fill gaps in the timeline (weeks 1-{phase.duration_weeks})
+2. Are specific and actionable
+3. Include detailed descriptions with steps, estimated time (e.g., 8-12 hours), and resources
+4. Have clear success criteria and deliverables
+5. Build logically on existing milestones
+
+Format each milestone as:
+- Week [X]: [Milestone title] - [Detailed description with specific steps, estimated time commitment, success criteria, and relevant links/resources when applicable]
+
+Only provide the milestone entries, no additional text."""
+
+                    response = await self.ai_service.generate_text(
+                        prompt=additional_milestones_prompt,
+                        model_type=ModelType.GEMINI_FLASH,
+                        max_tokens=800,
+                        temperature=0.7
+                    )
+                    
+                    # Parse the additional milestones
+                    additional_milestones = self._extract_milestones_from_content(f"Milestones:\n{response}")
+                    
+                    # Add them to the phase
+                    phase.milestones.extend(additional_milestones)
+                    
+                    # Sort milestones by week
+                    phase.milestones.sort(key=lambda m: m.estimated_completion_weeks)
+                    
+                    logger.info(f"Added {len(additional_milestones)} milestones to phase {phase.phase_number}")
+                    
+                except Exception as e:
+                    logger.error(f"Error generating additional milestones for phase {phase.phase_number}: {str(e)}")
+                    
+                    # Fallback: create basic milestones
+                    for i in range(missing_count):
+                        week = min(phase.duration_weeks, len(phase.milestones) + i + 1)
+                        fallback_milestone = Milestone(
+                            title=f"Complete {phase.title} Milestone {len(phase.milestones) + i + 1}",
+                            description=f"Work on developing skills and completing objectives for {phase.title}. Spend 8-10 hours this week focusing on practical application and skill building.",
+                            estimated_completion_weeks=week,
+                            success_criteria=[f"Complete assigned tasks for week {week}", "Demonstrate progress in key skills"],
+                            deliverables=[f"Week {week} progress report"]
+                        )
+                        phase.milestones.append(fallback_milestone)
+
     def _enhance_roadmap_with_resources(self, roadmap: Roadmap, scraped_resources: List[LearningResource]):
         """Enhance roadmap phases with scraped learning resources"""
         

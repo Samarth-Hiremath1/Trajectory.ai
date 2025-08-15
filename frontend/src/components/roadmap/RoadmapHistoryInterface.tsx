@@ -440,6 +440,7 @@ export function RoadmapHistoryInterface() {
                   <div className="lg:col-span-2">
                     <RoadmapDisplay
                       roadmap={selectedRoadmap}
+                      userId={profile?.user_id}
                       onPhaseUpdate={handlePhaseUpdate}
                       onEdit={handleEditRoadmap}
                     />

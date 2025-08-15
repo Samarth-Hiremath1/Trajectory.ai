@@ -7,8 +7,8 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 import uuid
 import logging
-from backend.services.database_service import DatabaseService
-from backend.models.task import (
+from services.database_service import DatabaseService
+from models.task import (
     Task, TaskCreate, TaskUpdate, TaskFilter, TaskStats,
     TaskStatus, TaskPriority, TaskType
 )
@@ -33,12 +33,13 @@ class TaskService:
                 "user_id": converted_user_id,
                 "title": task_data.title,
                 "description": task_data.description,
-                "priority": task_data.priority.value,
-                "task_type": task_data.task_type.value,
+                "status": task_data.status.value if hasattr(task_data.status, 'value') else str(task_data.status),
+                "priority": task_data.priority.value if hasattr(task_data.priority, 'value') else str(task_data.priority),
+                "task_type": task_data.task_type.value if hasattr(task_data.task_type, 'value') else str(task_data.task_type),
                 "due_date": task_data.due_date.isoformat() if task_data.due_date else None,
                 "estimated_hours": task_data.estimated_hours,
-                "tags": task_data.tags,
-                "metadata": task_data.metadata,
+                "tags": task_data.tags or [],
+                "metadata": task_data.metadata or {},
                 "created_at": datetime.utcnow().isoformat(),
                 "updated_at": datetime.utcnow().isoformat()
             }
@@ -74,13 +75,13 @@ class TaskService:
             # Apply filters
             if task_filter:
                 if task_filter.status:
-                    query = query.eq("status", task_filter.status.value)
+                    query = query.eq("status", task_filter.status.value if hasattr(task_filter.status, 'value') else task_filter.status)
                 
                 if task_filter.priority:
-                    query = query.eq("priority", task_filter.priority.value)
+                    query = query.eq("priority", task_filter.priority.value if hasattr(task_filter.priority, 'value') else task_filter.priority)
                 
                 if task_filter.task_type:
-                    query = query.eq("task_type", task_filter.task_type.value)
+                    query = query.eq("task_type", task_filter.task_type.value if hasattr(task_filter.task_type, 'value') else task_filter.task_type)
                 
                 if task_filter.roadmap_id:
                     query = query.eq("roadmap_id", task_filter.roadmap_id)
@@ -382,15 +383,16 @@ class TaskService:
                 "roadmap_id": roadmap_id,
                 "title": task_data.title,
                 "description": task_data.description,
-                "priority": task_data.priority.value,
-                "task_type": task_data.task_type.value,
+                "status": task_data.status.value if hasattr(task_data.status, 'value') else str(task_data.status),
+                "priority": task_data.priority.value if hasattr(task_data.priority, 'value') else str(task_data.priority),
+                "task_type": task_data.task_type.value if hasattr(task_data.task_type, 'value') else str(task_data.task_type),
                 "phase_number": phase_number,
                 "milestone_index": milestone_index,
                 "skill_name": skill_name,
                 "due_date": task_data.due_date.isoformat() if task_data.due_date else None,
                 "estimated_hours": task_data.estimated_hours,
-                "tags": task_data.tags,
-                "metadata": task_data.metadata,
+                "tags": task_data.tags or [],
+                "metadata": task_data.metadata or {},
                 "created_at": datetime.utcnow().isoformat(),
                 "updated_at": datetime.utcnow().isoformat()
             }

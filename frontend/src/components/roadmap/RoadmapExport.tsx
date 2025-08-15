@@ -16,44 +16,26 @@ export function RoadmapExport({ roadmap, className = '' }: RoadmapExportProps) {
     try {
       setIsExporting(true)
       
-      // Extract tasks and dates from roadmap phases
-      const tasks = []
-      let currentWeek = 1
+      // Get current user ID from auth context or props
+      const userId = roadmap.user_id || window.localStorage.getItem('user_id') || 'default'
       
-      for (const phase of roadmap.phases) {
-        // Add phase start as a task
-        tasks.push({
-          title: `Start Phase ${phase.phase_number}: ${phase.title}`,
-          description: phase.description,
-          dueDate: new Date(Date.now() + (currentWeek - 1) * 7 * 24 * 60 * 60 * 1000),
-          category: 'Career Development',
-          priority: 'high',
-          source: 'roadmap'
-        })
-        
-        // Add milestones as tasks
-        for (const milestone of phase.milestones) {
-          const milestoneWeek = currentWeek + milestone.estimated_completion_weeks - 1
-          tasks.push({
-            title: milestone.title,
-            description: milestone.description || `Milestone for ${phase.title}`,
-            dueDate: new Date(Date.now() + (milestoneWeek - 1) * 7 * 24 * 60 * 60 * 1000),
-            category: 'Career Development',
-            priority: milestone.estimated_completion_weeks <= 2 ? 'high' : 'medium',
-            source: 'roadmap'
-          })
-        }
-        
-        currentWeek += phase.duration_weeks
-      }
-      
-      // Store tasks in localStorage for daily dashboard
-      const existingTasks = JSON.parse(localStorage.getItem('tasks') || '[]')
-      const updatedTasks = [...existingTasks, ...tasks]
-      localStorage.setItem('tasks', JSON.stringify(updatedTasks))
+      // Use the task sync manager to export tasks
+      const { taskSyncManager } = await import('@/lib/taskSync')
+      const exportedTasks = taskSyncManager.exportTasksFromRoadmap(userId, roadmap)
       
       setShowExportMenu(false)
-      alert(`Successfully exported ${tasks.length} tasks to Daily Dashboard!`)
+      alert(`Successfully exported ${exportedTasks.length} tasks to Daily Dashboard!`)
+      
+      // Trigger a refresh of the todo list and calendar
+      window.dispatchEvent(new CustomEvent('tasksUpdated'))
+      
+      // Also trigger a more specific event for task exports
+      window.dispatchEvent(new CustomEvent('tasksExported', { 
+        detail: { 
+          roadmapId: roadmap.id, 
+          taskCount: exportedTasks.length 
+        } 
+      }))
       
     } catch (error) {
       console.error('Export to daily dashboard error:', error)

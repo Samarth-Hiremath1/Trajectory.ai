@@ -221,6 +221,7 @@ export function RoadmapInterface() {
           
           <RoadmapDisplay
             roadmap={currentRoadmap}
+            userId={profile?.user_id}
             onPhaseUpdate={handlePhaseUpdate}
             onEdit={handleEditRoadmap}
           />

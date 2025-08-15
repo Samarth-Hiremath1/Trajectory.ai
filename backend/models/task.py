@@ -77,6 +77,7 @@ class TaskCreate(BaseModel):
     """Model for creating new tasks"""
     title: str = Field(..., min_length=1, max_length=200)
     description: Optional[str] = Field(None, max_length=1000)
+    status: TaskStatus = TaskStatus.PENDING
     priority: TaskPriority = TaskPriority.MEDIUM
     task_type: TaskType = TaskType.MANUAL
     due_date: Optional[datetime] = None

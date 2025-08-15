@@ -6,9 +6,10 @@ const BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:8000'
 
 export async function POST(
   request: NextRequest,
-  { params }: { params: { roadmapId: string } }
+  context: { params: Promise<{ roadmapId: string }> }
 ) {
   try {
+    const params = await context.params
     const session = await getServerSession(authOptions)
     if (!session?.user?.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
