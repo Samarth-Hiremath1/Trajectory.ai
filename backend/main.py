@@ -24,6 +24,7 @@ from api.task import router as task_router
 from api.learning_resources import router as learning_resources_router
 from api.langgraph_workflows import router as langgraph_workflows_router
 from api.agents import router as agents_router
+from api.performance import router as performance_router
 
 # Configure logging
 logging.basicConfig(
@@ -47,6 +48,24 @@ app.add_middleware(
 async def startup_event():
     """Initialize services on startup"""
     try:
+        # Initialize performance monitoring services
+        logger.info("Initializing performance services...")
+        
+        # Initialize connection pool
+        from services.connection_pool import get_connection_pool
+        pool = await get_connection_pool()
+        logger.info("Database connection pool initialized")
+        
+        # Initialize cache service
+        from services.cache_service import get_cache_service
+        cache = await get_cache_service()
+        logger.info(f"Cache service initialized with backend: {cache.backend.value}")
+        
+        # Initialize performance monitor
+        from services.performance_monitor import get_performance_monitor
+        monitor = await get_performance_monitor()
+        logger.info("Performance monitoring started")
+        
         # Initialize multi-agent service
         from services.multi_agent_service import get_multi_agent_service
         multi_agent_service = await get_multi_agent_service()
@@ -61,8 +80,10 @@ async def startup_event():
         else:
             logger.warning("No orchestrator found in multi-agent service")
             
+        logger.info("All services initialized successfully")
+            
     except Exception as e:
-        logger.error(f"Failed to initialize multi-agent service: {str(e)}")
+        logger.error(f"Failed to initialize services: {str(e)}")
         import traceback
         logger.error(f"Startup error traceback: {traceback.format_exc()}")
 
@@ -70,11 +91,32 @@ async def startup_event():
 async def shutdown_event():
     """Cleanup services on shutdown"""
     try:
+        logger.info("Shutting down services...")
+        
+        # Cleanup performance monitor
+        from services.performance_monitor import cleanup_performance_monitor
+        await cleanup_performance_monitor()
+        logger.info("Performance monitor cleaned up")
+        
+        # Cleanup cache service
+        from services.cache_service import cleanup_cache_service
+        await cleanup_cache_service()
+        logger.info("Cache service cleaned up")
+        
+        # Cleanup connection pool
+        from services.connection_pool import cleanup_connection_pool
+        await cleanup_connection_pool()
+        logger.info("Database connection pool cleaned up")
+        
+        # Cleanup multi-agent service
         from services.multi_agent_service import cleanup_multi_agent_service
         await cleanup_multi_agent_service()
         logger.info("Multi-agent service cleaned up")
+        
+        logger.info("All services cleaned up successfully")
+        
     except Exception as e:
-        logger.error(f"Failed to cleanup multi-agent service: {str(e)}")
+        logger.error(f"Failed to cleanup services: {str(e)}")
 
 # Include routers
 app.include_router(resume_router)
@@ -86,6 +128,7 @@ app.include_router(task_router)
 app.include_router(learning_resources_router)
 app.include_router(langgraph_workflows_router)
 app.include_router(agents_router)
+app.include_router(performance_router)
 
 @app.get("/")
 async def root():

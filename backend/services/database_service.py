@@ -19,6 +19,16 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Performance logging for database operations
+db_performance_logger = logging.getLogger("database.performance")
+db_performance_handler = logging.StreamHandler()
+db_performance_formatter = logging.Formatter(
+    '%(asctime)s - DB_PERFORMANCE - %(levelname)s - %(message)s'
+)
+db_performance_handler.setFormatter(db_performance_formatter)
+db_performance_logger.addHandler(db_performance_handler)
+db_performance_logger.setLevel(logging.INFO)
+
 class DatabaseService:
     """Service for handling database operations with Supabase"""
     
@@ -32,6 +42,11 @@ class DatabaseService:
         try:
             # Create Supabase client with explicit parameters only
             self.supabase: Client = create_client(supabase_url, supabase_key)
+            
+            # Initialize performance tracking
+            self.query_count = 0
+            self.total_query_time = 0.0
+            
         except Exception as e:
             logger.error(f"Failed to initialize Supabase client: {str(e)}")
             raise
@@ -43,6 +58,20 @@ class DatabaseService:
             hash_object = hashlib.md5(user_id.encode())
             return str(uuid.UUID(hash_object.hexdigest()))
         return user_id
+    
+    def _track_query_performance(self, operation: str, query_time: float, success: bool = True):
+        """Track query performance metrics"""
+        self.query_count += 1
+        self.total_query_time += query_time
+        
+        # Log performance details
+        db_performance_logger.info(
+            f"Database operation: {operation}, "
+            f"Time: {query_time:.3f}s, "
+            f"Success: {success}, "
+            f"Total queries: {self.query_count}, "
+            f"Avg time: {self.total_query_time / self.query_count:.3f}s"
+        )
     
     # Roadmap operations
     async def save_roadmap(self, roadmap: Roadmap) -> str:

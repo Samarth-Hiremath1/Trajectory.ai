@@ -13,6 +13,16 @@ import time
 
 logger = logging.getLogger(__name__)
 
+# Performance logging setup
+performance_logger = logging.getLogger("ai_service.performance")
+performance_handler = logging.StreamHandler()
+performance_formatter = logging.Formatter(
+    '%(asctime)s - AI_PERFORMANCE - %(levelname)s - %(message)s'
+)
+performance_handler.setFormatter(performance_formatter)
+performance_logger.addHandler(performance_handler)
+performance_logger.setLevel(logging.INFO)
+
 class AIProvider(Enum):
     """Supported AI providers"""
     GEMINI = "gemini"
@@ -210,6 +220,13 @@ class AIService:
             estimated_tokens = len(generated_text.split())
             self.metrics.total_tokens += estimated_tokens
             
+            # Performance logging
+            performance_logger.info(
+                f"Gemini request completed - Model: {model_type.value}, "
+                f"Response time: {response_time:.3f}s, Tokens: {estimated_tokens}, "
+                f"Prompt length: {len(prompt)}"
+            )
+            
             logger.info(f"Generated {estimated_tokens} tokens using Gemini {model_type.value}")
             return generated_text.strip()
             
@@ -276,6 +293,13 @@ class AIService:
                     usage = result.get("usage", {})
                     completion_tokens = usage.get("completion_tokens", len(generated_text.split()))
                     self.metrics.total_tokens += completion_tokens
+                    
+                    # Performance logging
+                    performance_logger.info(
+                        f"OpenRouter request completed - Model: {model_type.value}, "
+                        f"Response time: {response_time:.3f}s, Tokens: {completion_tokens}, "
+                        f"Prompt length: {len(prompt)}"
+                    )
                     
                     logger.info(f"Generated {completion_tokens} tokens using OpenRouter {model_type.value}")
                     return generated_text.strip()
