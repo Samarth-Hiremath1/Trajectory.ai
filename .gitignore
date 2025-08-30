@@ -69,11 +69,35 @@ logs/
 chroma_db/
 .chroma/
 
+# Uploads and storage
+uploads/
+storage/
+temp/
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+test-results/
+coverage/
+
 # Temporary files
 *.tmp
 *.temp
 .cache/
+.temp/
 
 # Build artifacts
 *.tgz
 *.tar.gz
+
+# Migration backups
+*.sql.bak
+migrations/*.bak
+
+# Agent learning data
+agent_learning_data/
+
+# Local development
+.local/
+.dev/

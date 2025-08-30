@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth-context'
 import { ChatMessage } from './ChatMessage'
 import { ChatInput } from './ChatInput'
 import { TypingIndicator } from './TypingIndicator'
+
 import { ChatSession, ChatMessage as ChatMessageType, MessageRole } from '@/types/chat'
 import { ApiErrorBoundary } from '@/components/error/ApiErrorBoundary'
 import { ErrorDisplay } from '@/components/ui/ErrorDisplay'
@@ -323,9 +324,11 @@ export function ChatInterface({ className = '' }: ChatInterfaceProps) {
         {/* Chat Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <h3 className="text-lg font-semibold text-gray-900">AI Career Mentor</h3>
-          <div className="flex items-center space-x-2">
-            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-            <span className="text-sm text-gray-600">Online</span>
+          <div className="flex items-center space-x-3">
+            <div className="flex items-center space-x-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+              <span className="text-sm text-gray-600">Online</span>
+            </div>
           </div>
         </div>
 

@@ -9,6 +9,14 @@ from models.chat import (
 )
 from services.chat_service import get_chat_service, RAGChatService
 
+# Import workflow orchestrator for health checks
+try:
+    from services.langgraph_workflow_orchestrator import LangGraphWorkflowOrchestrator
+    WORKFLOW_AVAILABLE = True
+except ImportError:
+    LangGraphWorkflowOrchestrator = None
+    WORKFLOW_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -253,6 +261,17 @@ async def chat_health_check(
     """Check the health of the chat service"""
     try:
         health = await chat_service.health_check()
+        
+        # Add workflow integration status
+        health["workflow_integration"] = {
+            "available": WORKFLOW_AVAILABLE,
+            "orchestrator_initialized": chat_service.workflow_orchestrator is not None
+        }
+        
+        if chat_service.workflow_orchestrator:
+            workflow_health = await chat_service.workflow_orchestrator.health_check()
+            health["workflow_orchestrator"] = workflow_health
+        
         return health
         
     except Exception as e:
@@ -260,4 +279,33 @@ async def chat_health_check(
         return {
             "status": "unhealthy",
             "error": str(e)
+        }
+
+@router.get("/workflow-templates")
+async def get_workflow_templates(
+    chat_service: RAGChatService = Depends(get_chat_service_dependency)
+):
+    """Get available workflow templates for chat requests"""
+    try:
+        if not chat_service.workflow_orchestrator:
+            return {
+                "available": False,
+                "message": "Workflow orchestrator not available",
+                "templates": {}
+            }
+        
+        templates = chat_service.workflow_orchestrator.get_workflow_templates()
+        
+        return {
+            "available": True,
+            "templates": templates,
+            "count": len(templates)
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get workflow templates: {e}")
+        return {
+            "available": False,
+            "error": str(e),
+            "templates": {}
         }

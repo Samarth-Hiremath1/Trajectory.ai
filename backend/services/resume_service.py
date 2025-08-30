@@ -1,6 +1,7 @@
 import os
 import uuid
 import pdfplumber
+import tempfile
 from typing import List, Dict, Optional, Tuple
 from pathlib import Path
 import re
@@ -9,6 +10,8 @@ import logging
 
 from models.resume import Resume, ResumeChunk, ResumeParseResult, ProcessingStatus
 from services.embedding_service import EmbeddingService
+from services.supabase_storage_service import SupabaseStorageService
+from services.storage_quota_manager import StorageQuotaManager
 
 logger = logging.getLogger(__name__)
 
@@ -16,9 +19,21 @@ logger = logging.getLogger(__name__)
 class ResumeProcessingService:
     """Service for processing resume uploads and parsing PDF content"""
     
-    def __init__(self, upload_dir: str = "uploads/resumes"):
-        self.upload_dir = Path(upload_dir)
-        self.upload_dir.mkdir(parents=True, exist_ok=True)
+    def __init__(self, use_cloud_storage: bool = True):
+        # Storage configuration
+        self.use_cloud_storage = use_cloud_storage
+        
+        if self.use_cloud_storage:
+            # Use Supabase Storage for cloud storage
+            self.storage_service = SupabaseStorageService()
+            self.quota_manager = StorageQuotaManager(self.storage_service)
+            logger.info("Using Supabase Storage for file storage with quota management")
+        else:
+            # Fallback to local storage
+            self.upload_dir = Path("uploads/resumes")
+            self.upload_dir.mkdir(parents=True, exist_ok=True)
+            self.quota_manager = None
+            logger.info("Using local file storage")
         
         # Text chunking parameters
         self.chunk_size = 500  # characters per chunk
@@ -27,18 +42,38 @@ class ResumeProcessingService:
         # Initialize embedding service
         self.embedding_service = EmbeddingService()
     
-    async def save_uploaded_file(self, file_content: bytes, filename: str, user_id: str) -> str:
-        """Save uploaded file to disk and return file path"""
-        # Generate unique filename to avoid conflicts
-        file_extension = Path(filename).suffix
-        unique_filename = f"{user_id}_{uuid.uuid4().hex}{file_extension}"
-        file_path = self.upload_dir / unique_filename
+    async def save_uploaded_file(self, file_content: bytes, filename: str, user_id: str, temporary: bool = False) -> Tuple[str, Optional[str], Dict]:
+        """
+        Save uploaded file and return storage path, URL, and storage info
         
-        # Save file to disk
-        with open(file_path, "wb") as f:
-            f.write(file_content)
+        Returns:
+            Tuple of (storage_path, public_url, storage_info)
+        """
+        storage_info = {"temporary": temporary, "quota_status": None}
         
-        return str(file_path)
+        if self.use_cloud_storage:
+            # Check quota status if quota manager is available
+            if self.quota_manager:
+                quota_status = await self.quota_manager.check_storage_status()
+                storage_info["quota_status"] = quota_status
+                temporary = quota_status["mode"].value == "temporary"
+                storage_info["temporary"] = temporary
+            
+            # Use Supabase Storage
+            storage_path, public_url = await self.storage_service.save_uploaded_file(
+                file_content, filename, user_id, temporary=temporary
+            )
+            return storage_path, public_url, storage_info
+        else:
+            # Fallback to local storage
+            file_extension = Path(filename).suffix
+            unique_filename = f"{user_id}_{uuid.uuid4().hex}{file_extension}"
+            file_path = self.upload_dir / unique_filename
+            
+            with open(file_path, "wb") as f:
+                f.write(file_content)
+            
+            return str(file_path), None, storage_info
     
     def validate_pdf_file(self, file_content: bytes, filename: str) -> Tuple[bool, Optional[str]]:
         """Validate uploaded PDF file"""
@@ -61,24 +96,34 @@ class ResumeProcessingService:
         
         return True, None
     
-    def parse_pdf_content(self, file_path: str) -> ResumeParseResult:
+    def parse_pdf_content(self, file_content: bytes, filename: str) -> ResumeParseResult:
         """Extract text content from PDF using pdfplumber"""
         try:
             text_content = ""
             metadata = {
                 "page_count": 0,
-                "extraction_method": "pdfplumber"
+                "extraction_method": "pdfplumber",
+                "filename": filename
             }
             
-            with pdfplumber.open(file_path) as pdf:
-                metadata["page_count"] = len(pdf.pages)
-                
-                for page_num, page in enumerate(pdf.pages):
-                    page_text = page.extract_text()
-                    if page_text:
-                        text_content += f"\n--- Page {page_num + 1} ---\n"
-                        text_content += page_text
-                        text_content += "\n"
+            # Create temporary file for pdfplumber processing
+            with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as temp_file:
+                temp_file.write(file_content)
+                temp_file_path = temp_file.name
+            
+            try:
+                with pdfplumber.open(temp_file_path) as pdf:
+                    metadata["page_count"] = len(pdf.pages)
+                    
+                    for page_num, page in enumerate(pdf.pages):
+                        page_text = page.extract_text()
+                        if page_text:
+                            text_content += f"\n--- Page {page_num + 1} ---\n"
+                            text_content += page_text
+                            text_content += "\n"
+            finally:
+                # Clean up temporary file
+                os.unlink(temp_file_path)
             
             # Clean up the extracted text
             text_content = self._clean_text(text_content)
@@ -178,14 +223,19 @@ class ResumeProcessingService:
         
         return chunks
     
-    def delete_resume_file(self, file_path: str) -> bool:
-        """Delete resume file from disk"""
+    async def delete_resume_file(self, file_path: str) -> bool:
+        """Delete resume file from storage"""
         try:
-            if os.path.exists(file_path):
-                os.remove(file_path)
-                return True
-            return False
-        except Exception:
+            if self.use_cloud_storage:
+                return await self.storage_service.delete_file(file_path)
+            else:
+                # Local file deletion
+                if os.path.exists(file_path):
+                    os.remove(file_path)
+                    return True
+                return False
+        except Exception as e:
+            logger.error(f"Failed to delete resume file: {e}")
             return False
     
     async def process_resume_with_embeddings(self, user_id: str, file_content: bytes, filename: str) -> Dict:
@@ -202,11 +252,11 @@ class ResumeProcessingService:
                     "processing_status": ProcessingStatus.FAILED
                 }
             
-            # Save file
-            file_path = await self.save_uploaded_file(file_content, filename, user_id)
+            # Save file (quota manager will determine if temporary)
+            file_path, public_url, storage_info = await self.save_uploaded_file(file_content, filename, user_id)
             
             # Parse PDF content
-            parse_result = self.parse_pdf_content(file_path)
+            parse_result = self.parse_pdf_content(file_content, filename)
             if not parse_result.success:
                 return {
                     "success": False,
@@ -226,17 +276,54 @@ class ResumeProcessingService:
                 logger.warning(f"Failed to refresh chat context for user {user_id}: {context_error}")
                 # Don't fail the resume processing for this
             
-            logger.info(f"Successfully processed resume for user {user_id}")
-            return {
+            # Handle temporary file cleanup if needed
+            cleanup_info = None
+            user_notification = None
+            
+            if storage_info.get("temporary", False):
+                # File will be deleted after processing
+                try:
+                    await self.delete_resume_file(file_path)
+                    cleanup_info = {
+                        "file_deleted": True,
+                        "reason": "storage_limit_reached"
+                    }
+                    logger.info(f"Deleted temporary resume file for user {user_id} due to storage limits")
+                except Exception as cleanup_error:
+                    logger.error(f"Failed to delete temporary file: {cleanup_error}")
+                    cleanup_info = {
+                        "file_deleted": False,
+                        "error": str(cleanup_error)
+                    }
+                
+                # Get user notification message
+                if self.quota_manager and storage_info.get("quota_status"):
+                    user_notification = self.quota_manager.get_user_notification_message(
+                        storage_info["quota_status"]
+                    )
+            
+            logger.info(f"Successfully processed resume for user {user_id} (temporary: {storage_info.get('temporary', False)})")
+            
+            result = {
                 "success": True,
                 "file_path": file_path,
+                "public_url": public_url,
                 "text_content": parse_result.text_content,
                 "chunks": parse_result.chunks,
                 "chunk_count": len(parse_result.chunks),
                 "metadata": parse_result.metadata,
                 "embeddings_stored": embedding_success,
-                "processing_status": ProcessingStatus.COMPLETED
+                "processing_status": ProcessingStatus.COMPLETED,
+                "storage_info": storage_info
             }
+            
+            # Add cleanup and notification info if applicable
+            if cleanup_info:
+                result["cleanup_info"] = cleanup_info
+            if user_notification:
+                result["user_notification"] = user_notification
+            
+            return result
             
         except Exception as e:
             logger.error(f"Resume processing failed for user {user_id}: {e}")
@@ -263,7 +350,7 @@ class ResumeProcessingService:
             # Delete file if path provided
             file_deleted = True
             if file_path:
-                file_deleted = self.delete_resume_file(file_path)
+                file_deleted = await self.delete_resume_file(file_path)
             
             logger.info(f"Deleted resume data for user {user_id}")
             return embeddings_deleted and file_deleted

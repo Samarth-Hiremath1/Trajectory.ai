@@ -3,7 +3,7 @@
 import { useState, useRef } from 'react'
 import { ApiErrorBoundary } from '@/components/error/ApiErrorBoundary'
 import { ErrorDisplay } from '@/components/ui/ErrorDisplay'
-import { ResumeUploadLoadingState } from '@/components/ui/LoadingState'
+import { ResumeUploadLoader } from '@/components/ui/WaveformLoader'
 import { AppError } from '@/lib/error-utils'
 
 interface ResumeUploadFormProps {
@@ -91,7 +91,7 @@ export default function ResumeUploadForm({ onSubmit, onBack, isSubmitting, exist
   return (
     <ApiErrorBoundary operation="resume upload">
       {isSubmitting ? (
-        <ResumeUploadLoadingState />
+        <ResumeUploadLoader />
       ) : (
         <form onSubmit={handleSubmit} className="space-y-6">
       <div>

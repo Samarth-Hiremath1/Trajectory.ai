@@ -230,12 +230,24 @@ async def roadmap_health_check():
             max_suggestions=2
         )
         
-        return {
+        health_data = {
             "status": "healthy",
             "service": "roadmap",
             "test_suggestions_count": len(test_suggestions),
-            "timestamp": "2024-01-01T00:00:00Z"
+            "timestamp": datetime.utcnow().isoformat()
         }
+        
+        # Add workflow integration status
+        health_data["workflow_integration"] = {
+            "available": hasattr(roadmap_service, 'workflow_orchestrator') and roadmap_service.workflow_orchestrator is not None,
+            "orchestrator_initialized": roadmap_service.workflow_orchestrator is not None if hasattr(roadmap_service, 'workflow_orchestrator') else False
+        }
+        
+        if hasattr(roadmap_service, 'workflow_orchestrator') and roadmap_service.workflow_orchestrator:
+            workflow_health = await roadmap_service.workflow_orchestrator.health_check()
+            health_data["workflow_orchestrator"] = workflow_health
+        
+        return health_data
         
     except Exception as e:
         logger.error(f"Roadmap health check failed: {str(e)}")
@@ -243,7 +255,42 @@ async def roadmap_health_check():
             "status": "unhealthy",
             "service": "roadmap",
             "error": str(e),
-            "timestamp": "2024-01-01T00:00:00Z"
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+@router.get("/workflow-capabilities")
+async def get_roadmap_workflow_capabilities():
+    """Get workflow capabilities for roadmap generation"""
+    
+    try:
+        roadmap_service = await get_roadmap_service()
+        
+        capabilities = {
+            "workflow_available": hasattr(roadmap_service, 'workflow_orchestrator') and roadmap_service.workflow_orchestrator is not None,
+            "supported_workflows": [],
+            "complexity_thresholds": {
+                "multiple_focus_areas": "> 2 focus areas",
+                "multiple_constraints": "> 1 constraint", 
+                "specific_timeline": "timeline preference specified",
+                "detailed_background": "> 200 characters",
+                "career_transition": "different current and target roles"
+            }
+        }
+        
+        if hasattr(roadmap_service, 'workflow_orchestrator') and roadmap_service.workflow_orchestrator:
+            capabilities["supported_workflows"] = roadmap_service.workflow_orchestrator.get_available_workflows()
+            
+            templates = roadmap_service.workflow_orchestrator.get_workflow_templates()
+            capabilities["workflow_templates"] = templates
+        
+        return capabilities
+        
+    except Exception as e:
+        logger.error(f"Failed to get workflow capabilities: {str(e)}")
+        return {
+            "workflow_available": False,
+            "error": str(e),
+            "supported_workflows": []
         }
 
 @router.post("/test-generation")

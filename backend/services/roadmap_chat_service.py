@@ -29,6 +29,17 @@ except ImportError:
     EmbeddingService = None
     EMBEDDING_AVAILABLE = False
 
+# Multi-Agent System import
+try:
+    from services.multi_agent_service import get_multi_agent_service, MultiAgentService
+    from models.agent import RequestType
+    MULTI_AGENT_AVAILABLE = True
+except ImportError:
+    get_multi_agent_service = None
+    MultiAgentService = None
+    RequestType = None
+    MULTI_AGENT_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 class RoadmapChatService:
@@ -41,6 +52,7 @@ class RoadmapChatService:
         
         # Initialize optional services
         self.embedding_service = EmbeddingService() if EMBEDDING_AVAILABLE else None
+        self.multi_agent_service: Optional[MultiAgentService] = None
         
         # In-memory session storage for active roadmap chat sessions
         self.active_sessions: Dict[str, ChatSession] = {}
@@ -51,7 +63,10 @@ class RoadmapChatService:
         self.max_memory_messages = 8  # Keep last 8 messages in memory for roadmap chat
         self.max_context_chunks = 3   # Max roadmap context chunks to include
         
-        logger.info(f"Roadmap Chat Service initialized (Embedding: {EMBEDDING_AVAILABLE})")
+        # Workflow routing patterns for roadmap chat
+        self.roadmap_workflow_patterns = self._initialize_roadmap_workflow_patterns()
+        
+        logger.info(f"Roadmap Chat Service initialized (Embedding: {EMBEDDING_AVAILABLE}, MultiAgent: {MULTI_AGENT_AVAILABLE})")
     
     async def _get_ai_service(self) -> AIService:
         """Get or initialize AI service"""
@@ -64,6 +79,102 @@ class RoadmapChatService:
         if self.roadmap_service is None:
             self.roadmap_service = await get_roadmap_service()
         return self.roadmap_service
+    
+    async def _get_multi_agent_service(self) -> Optional[MultiAgentService]:
+        """Get or initialize Multi-Agent Service"""
+        if not MULTI_AGENT_AVAILABLE:
+            return None
+            
+        if self.multi_agent_service is None:
+            try:
+                self.multi_agent_service = await get_multi_agent_service()
+                logger.info("Multi-Agent Service initialized for roadmap chat service")
+            except Exception as e:
+                logger.warning(f"Failed to initialize multi-agent service: {e}")
+                return None
+        
+        return self.multi_agent_service
+    
+    def _initialize_roadmap_workflow_patterns(self) -> Dict[str, Dict[str, Any]]:
+        """Initialize patterns for routing roadmap chat requests to workflows"""
+        return {
+            "roadmap_enhancement": {
+                "keywords": ["improve", "enhance", "better", "optimize", "update", "modify"],
+                "workflow": "roadmap_enhancement",
+                "confidence_threshold": 0.6
+            },
+            "skill_deep_dive": {
+                "keywords": ["skill", "learn more about", "how to develop", "practice", "master"],
+                "workflow": "comprehensive_analysis",
+                "confidence_threshold": 0.5
+            },
+            "resource_recommendations": {
+                "keywords": ["resource", "course", "book", "tutorial", "where to learn", "recommend"],
+                "workflow": "comprehensive_analysis",
+                "confidence_threshold": 0.5
+            },
+            "timeline_adjustment": {
+                "keywords": ["timeline", "faster", "slower", "time", "schedule", "when"],
+                "workflow": "roadmap_enhancement",
+                "confidence_threshold": 0.6
+            }
+        }
+    
+    def _should_use_workflow_for_roadmap_chat(
+        self, 
+        message: str, 
+        roadmap_context: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """Determine if a roadmap chat message should be routed through multi-agent system"""
+        if not MULTI_AGENT_AVAILABLE:
+            return None
+        
+        message_lower = message.lower()
+        
+        # Check for workflow patterns
+        for pattern_name, pattern_config in self.roadmap_workflow_patterns.items():
+            keyword_matches = sum(1 for keyword in pattern_config["keywords"] if keyword in message_lower)
+            confidence = keyword_matches / len(pattern_config["keywords"])
+            
+            if confidence >= pattern_config["confidence_threshold"]:
+                return {
+                    "workflow_name": pattern_config["workflow"],
+                    "pattern_matched": pattern_name,
+                    "confidence": confidence,
+                    "request_type": self._map_roadmap_pattern_to_request_type(pattern_name)
+                }
+        
+        # Check for complex enhancement requests
+        enhancement_indicators = [
+            "change" in message_lower,
+            "add" in message_lower,
+            "remove" in message_lower,
+            len(message.split()) > 15,  # Long messages
+            "?" in message and len(message.split("?")) > 1  # Multiple questions
+        ]
+        
+        if sum(enhancement_indicators) >= 2:
+            return {
+                "workflow_name": "roadmap_enhancement",
+                "pattern_matched": "complex_enhancement",
+                "confidence": 0.7,
+                "request_type": RequestType.ROADMAP_GENERATION
+            }
+        
+        return None
+    
+    def _map_roadmap_pattern_to_request_type(self, pattern_name: str) -> 'RequestType':
+        """Map roadmap workflow pattern to RequestType enum"""
+        if not MULTI_AGENT_AVAILABLE:
+            return None
+            
+        mapping = {
+            "roadmap_enhancement": RequestType.ROADMAP_GENERATION,
+            "skill_deep_dive": RequestType.SKILL_ANALYSIS,
+            "resource_recommendations": RequestType.LEARNING_PATH,
+            "timeline_adjustment": RequestType.ROADMAP_GENERATION
+        }
+        return mapping.get(pattern_name, RequestType.CAREER_ADVICE)
     
     def _create_session_memory(self, session_id: str) -> ConversationBufferWindowMemory:
         """Create LangChain memory for a roadmap chat session"""
@@ -298,29 +409,34 @@ IMPORTANT: You are discussing the user's specific roadmap shown in the context b
             # Get roadmap context
             roadmap_data, roadmap_context = await self._get_roadmap_context(roadmap_id, message)
             
-            # Create prompt template
-            prompt_template = self._create_roadmap_chat_prompt_template()
+            # Check if request should be routed through workflow
+            workflow_routing = self._should_use_workflow_for_roadmap_chat(message, roadmap_data)
             
-            # Get AI service
-            ai_service = await self._get_ai_service()
+            ai_response = None
+            workflow_used = False
             
-            # Prepare prompt variables
-            chat_history = memory.chat_memory.messages
+            if workflow_routing:
+                # Route through Multi-Agent System
+                try:
+                    ai_response = await self._process_roadmap_message_with_multi_agent_system(
+                        message, 
+                        session.user_id, 
+                        roadmap_id,
+                        roadmap_data,
+                        workflow_routing
+                    )
+                    workflow_used = True
+                    logger.info(f"Processed roadmap message through workflow: {workflow_routing['workflow_name']}")
+                except Exception as workflow_error:
+                    logger.warning(f"Roadmap workflow processing failed, falling back to direct AI: {workflow_error}")
+                    # Fall back to direct AI processing
+                    ai_response = None
             
-            # Format the complete prompt
-            formatted_prompt = prompt_template.format(
-                roadmap_context=roadmap_context,
-                chat_history=chat_history,
-                question=message
-            )
-            
-            # Generate AI response
-            ai_response = await ai_service.generate_text(
-                prompt=formatted_prompt,
-                model_type=ModelType.GEMINI_FLASH,
-                max_tokens=600,
-                temperature=0.7
-            )
+            # If no workflow was used or workflow failed, use direct AI processing
+            if not ai_response:
+                ai_response = await self._process_roadmap_message_with_direct_ai(
+                    message, roadmap_context, memory.chat_memory.messages
+                )
             
             # Create assistant message
             assistant_message = ChatMessage(
@@ -329,7 +445,9 @@ IMPORTANT: You are discussing the user's specific roadmap shown in the context b
                 metadata={
                     "roadmap_id": roadmap_id,
                     "roadmap_context_used": True,
-                    "model_used": ModelType.GEMINI_FLASH.value
+                    "model_used": ModelType.GEMINI_FLASH.value,
+                    "workflow_used": workflow_used,
+                    "workflow_name": workflow_routing.get("workflow_name") if workflow_routing else None
                 }
             )
             
@@ -355,6 +473,134 @@ IMPORTANT: You are discussing the user's specific roadmap shown in the context b
         except Exception as e:
             logger.error(f"Failed to send roadmap message: {e}")
             raise
+    
+    async def _process_roadmap_message_with_workflow(
+        self,
+        message: str,
+        user_id: str,
+        roadmap_id: str,
+        roadmap_data: Dict[str, Any],
+        workflow_routing: Dict[str, Any]
+    ) -> str:
+        """Process roadmap message using LangGraph workflow"""
+        orchestrator = await self._get_workflow_orchestrator()
+        if not orchestrator:
+            raise Exception("Workflow orchestrator not available")
+        
+        # Prepare request content for workflow
+        request_content = {
+            "user_message": message,
+            "roadmap_id": roadmap_id,
+            "roadmap_data": roadmap_data,
+            "roadmap_context": True,
+            "enhancement_request": workflow_routing["pattern_matched"] in ["roadmap_enhancement", "timeline_adjustment"]
+        }
+        
+        # Execute workflow
+        workflow_result = await orchestrator.execute_workflow(
+            workflow_name=workflow_routing["workflow_name"],
+            user_id=user_id,
+            request_type=workflow_routing["request_type"],
+            request_content=request_content
+        )
+        
+        if workflow_result["success"]:
+            # Extract response from workflow result
+            final_response = workflow_result.get("final_response", {})
+            
+            if isinstance(final_response, dict):
+                # Format workflow response for roadmap chat
+                return self._format_roadmap_workflow_response(final_response, workflow_routing["pattern_matched"])
+            else:
+                return str(final_response)
+        else:
+            raise Exception(f"Workflow execution failed: {workflow_result.get('error', 'Unknown error')}")
+    
+    async def _process_roadmap_message_with_direct_ai(
+        self,
+        message: str,
+        roadmap_context: str,
+        chat_history: List[BaseMessage]
+    ) -> str:
+        """Process roadmap message using direct AI service"""
+        # Create prompt template
+        prompt_template = self._create_roadmap_chat_prompt_template()
+        
+        # Get AI service
+        ai_service = await self._get_ai_service()
+        
+        # Format the complete prompt
+        formatted_prompt = prompt_template.format(
+            roadmap_context=roadmap_context,
+            chat_history=chat_history,
+            question=message
+        )
+        
+        # Generate AI response
+        return await ai_service.generate_text(
+            prompt=formatted_prompt,
+            model_type=ModelType.GEMINI_FLASH,
+            max_tokens=600,
+            temperature=0.7
+        )
+    
+    def _format_roadmap_workflow_response(
+        self, 
+        response_data: Dict[str, Any], 
+        pattern_matched: str
+    ) -> str:
+        """Format workflow response data for roadmap chat"""
+        if not response_data:
+            return "I apologize, but I wasn't able to generate a comprehensive response about your roadmap. Please try rephrasing your question."
+        
+        formatted_parts = []
+        
+        # Format based on the pattern that was matched
+        if pattern_matched == "roadmap_enhancement":
+            if "enhanced_roadmap" in response_data:
+                formatted_parts.append("**Roadmap Enhancement Suggestions:**")
+                enhancement = response_data["enhanced_roadmap"]
+                if isinstance(enhancement, dict):
+                    for key, value in enhancement.items():
+                        if isinstance(value, list):
+                            formatted_parts.append(f"• **{key.replace('_', ' ').title()}**: {', '.join(value[:3])}")
+                        else:
+                            formatted_parts.append(f"• **{key.replace('_', ' ').title()}**: {value}")
+                formatted_parts.append("")
+        
+        elif pattern_matched == "skill_deep_dive":
+            if "skills_analysis" in response_data:
+                skills = response_data["skills_analysis"]
+                if isinstance(skills, dict):
+                    if skills.get("detailed_analysis"):
+                        formatted_parts.append("**Detailed Skill Analysis:**")
+                        for analysis in skills["detailed_analysis"][:3]:
+                            formatted_parts.append(f"• {analysis}")
+                        formatted_parts.append("")
+        
+        elif pattern_matched == "resource_recommendations":
+            if "learning_resources" in response_data:
+                resources = response_data["learning_resources"]
+                if isinstance(resources, dict) and resources.get("recommended_resources"):
+                    formatted_parts.append("**Additional Learning Resources:**")
+                    for resource in resources["recommended_resources"][:3]:
+                        if isinstance(resource, dict):
+                            title = resource.get("title", "Resource")
+                            description = resource.get("description", "")
+                            formatted_parts.append(f"• **{title}**: {description}")
+                        else:
+                            formatted_parts.append(f"• {resource}")
+                    formatted_parts.append("")
+        
+        # Add synthesis if available
+        if "synthesis" in response_data:
+            formatted_parts.append(response_data["synthesis"])
+        
+        # Add workflow metadata
+        if "workflow_metadata" in response_data:
+            formatted_parts.append("*This response was generated using our specialized roadmap analysis system.*")
+        
+        return "\n".join(formatted_parts) if formatted_parts else "I've analyzed your roadmap request using our specialized system. Please let me know if you'd like me to elaborate on any specific aspect."
     
     async def process_roadmap_edit_request(
         self, 

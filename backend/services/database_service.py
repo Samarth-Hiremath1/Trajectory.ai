@@ -11,6 +11,10 @@ from dotenv import load_dotenv
 load_dotenv()
 from models.roadmap import Roadmap, RoadmapStatus
 from models.chat import ChatSession, ChatMessage
+from models.agent import (
+    AgentRequest, AgentResponse, AgentWorkflow, AgentMessage, 
+    AgentStatus, AgentCollaboration
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -533,3 +537,351 @@ class DatabaseService:
         except Exception as e:
             logger.error(f"Error deleting resume for user {user_id}: {str(e)}")
             raise
+    
+    # Agent system operations
+    async def save_agent_request(self, request: AgentRequest) -> str:
+        """Save an agent request to the database"""
+        try:
+            request_data = {
+                "id": request.id,
+                "user_id": request.user_id,
+                "request_type": request.request_type.value,
+                "content": request.content,
+                "context": request.context,
+                "priority": request.priority.value,
+                "status": request.status.value,
+                "assigned_agents": request.assigned_agents,
+                "metadata": request.metadata,
+                "created_at": request.created_at.isoformat()
+            }
+            
+            result = self.supabase.table("agent_requests").insert(request_data).execute()
+            
+            if result.data:
+                logger.info(f"Saved agent request {request.id}")
+                return result.data[0]["id"]
+            
+            raise Exception("No data returned from agent request save operation")
+            
+        except Exception as e:
+            logger.error(f"Error saving agent request: {str(e)}")
+            raise
+    
+    async def get_agent_request(self, request_id: str) -> Optional[AgentRequest]:
+        """Get an agent request by ID"""
+        try:
+            result = self.supabase.table("agent_requests").select("*").eq("id", request_id).execute()
+            
+            if result.data:
+                data = result.data[0]
+                return self._convert_db_to_agent_request(data)
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error getting agent request {request_id}: {str(e)}")
+            raise
+    
+    async def update_agent_request_status(self, request_id: str, status: str, assigned_agents: Optional[List[str]] = None) -> bool:
+        """Update agent request status"""
+        try:
+            update_data = {
+                "status": status,
+                "updated_at": datetime.utcnow().isoformat()
+            }
+            
+            if assigned_agents is not None:
+                update_data["assigned_agents"] = assigned_agents
+            
+            result = self.supabase.table("agent_requests").update(update_data).eq("id", request_id).execute()
+            
+            logger.info(f"Updated agent request {request_id} status to {status}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Error updating agent request status: {str(e)}")
+            raise
+    
+    async def save_agent_response(self, response: AgentResponse) -> str:
+        """Save an agent response to the database"""
+        try:
+            response_data = {
+                "id": response.id,
+                "request_id": response.request_id,
+                "agent_id": response.agent_id,
+                "agent_type": response.agent_type.value,
+                "response_content": response.response_content,
+                "confidence_score": response.confidence_score,
+                "processing_time": response.processing_time,
+                "metadata": response.metadata,
+                "created_at": response.created_at.isoformat()
+            }
+            
+            result = self.supabase.table("agent_responses").insert(response_data).execute()
+            
+            if result.data:
+                logger.info(f"Saved agent response {response.id}")
+                return result.data[0]["id"]
+            
+            raise Exception("No data returned from agent response save operation")
+            
+        except Exception as e:
+            logger.error(f"Error saving agent response: {str(e)}")
+            raise
+    
+    async def get_agent_responses(self, request_id: str) -> List[AgentResponse]:
+        """Get all agent responses for a request"""
+        try:
+            result = self.supabase.table("agent_responses").select("*").eq("request_id", request_id).execute()
+            
+            responses = []
+            if result.data:
+                for data in result.data:
+                    response = self._convert_db_to_agent_response(data)
+                    if response:
+                        responses.append(response)
+            
+            return responses
+            
+        except Exception as e:
+            logger.error(f"Error getting agent responses for request {request_id}: {str(e)}")
+            raise
+    
+    async def save_agent_workflow(self, workflow: AgentWorkflow) -> str:
+        """Save an agent workflow to the database"""
+        try:
+            workflow_data = {
+                "id": workflow.id,
+                "request_id": workflow.request_id,
+                "orchestrator_id": workflow.orchestrator_id,
+                "participating_agents": workflow.participating_agents,
+                "workflow_steps": [step.dict() for step in workflow.workflow_steps],
+                "current_step": workflow.current_step,
+                "status": workflow.status.value,
+                "metadata": workflow.metadata,
+                "created_at": workflow.created_at.isoformat(),
+                "completed_at": workflow.completed_at.isoformat() if workflow.completed_at else None
+            }
+            
+            if await self._workflow_exists(workflow.id):
+                # Update existing workflow
+                result = self.supabase.table("agent_workflows").update(workflow_data).eq("id", workflow.id).execute()
+                logger.info(f"Updated agent workflow {workflow.id}")
+                return workflow.id
+            else:
+                # Create new workflow
+                result = self.supabase.table("agent_workflows").insert(workflow_data).execute()
+                if result.data:
+                    logger.info(f"Saved agent workflow {workflow.id}")
+                    return result.data[0]["id"]
+            
+            raise Exception("No data returned from agent workflow save operation")
+            
+        except Exception as e:
+            logger.error(f"Error saving agent workflow: {str(e)}")
+            raise
+    
+    async def get_agent_workflow(self, workflow_id: str) -> Optional[AgentWorkflow]:
+        """Get an agent workflow by ID"""
+        try:
+            result = self.supabase.table("agent_workflows").select("*").eq("id", workflow_id).execute()
+            
+            if result.data:
+                data = result.data[0]
+                return self._convert_db_to_agent_workflow(data)
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error getting agent workflow {workflow_id}: {str(e)}")
+            raise
+    
+    async def save_agent_message(self, message: AgentMessage) -> str:
+        """Save an agent message to the database"""
+        try:
+            message_data = {
+                "id": message.id,
+                "sender_agent_id": message.sender_agent_id,
+                "recipient_agent_id": message.recipient_agent_id,
+                "message_type": message.message_type.value,
+                "content": message.content,
+                "acknowledged": message.acknowledged,
+                "metadata": message.metadata,
+                "timestamp": message.timestamp.isoformat()
+            }
+            
+            result = self.supabase.table("agent_messages").insert(message_data).execute()
+            
+            if result.data:
+                logger.debug(f"Saved agent message {message.id}")
+                return result.data[0]["id"]
+            
+            raise Exception("No data returned from agent message save operation")
+            
+        except Exception as e:
+            logger.error(f"Error saving agent message: {str(e)}")
+            raise
+    
+    async def update_agent_status(self, status: AgentStatus) -> bool:
+        """Update or insert agent status"""
+        try:
+            status_data = {
+                "agent_id": status.agent_id,
+                "agent_type": status.agent_type.value,
+                "is_active": status.is_active,
+                "current_load": status.current_load,
+                "max_concurrent_requests": status.max_concurrent_requests,
+                "capabilities": [cap.dict() for cap in status.capabilities],
+                "performance_metrics": status.performance_metrics,
+                "last_heartbeat": status.last_heartbeat.isoformat()
+            }
+            
+            # Use upsert to handle both insert and update
+            result = self.supabase.table("agent_status").upsert(status_data, on_conflict="agent_id").execute()
+            
+            if result.data:
+                logger.debug(f"Updated agent status for {status.agent_id}")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error updating agent status: {str(e)}")
+            raise
+    
+    async def get_agent_status(self, agent_id: str) -> Optional[AgentStatus]:
+        """Get agent status by ID"""
+        try:
+            result = self.supabase.table("agent_status").select("*").eq("agent_id", agent_id).execute()
+            
+            if result.data:
+                data = result.data[0]
+                return self._convert_db_to_agent_status(data)
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error getting agent status {agent_id}: {str(e)}")
+            raise
+    
+    async def get_all_agent_statuses(self) -> List[AgentStatus]:
+        """Get all agent statuses"""
+        try:
+            result = self.supabase.table("agent_status").select("*").execute()
+            
+            statuses = []
+            if result.data:
+                for data in result.data:
+                    status = self._convert_db_to_agent_status(data)
+                    if status:
+                        statuses.append(status)
+            
+            return statuses
+            
+        except Exception as e:
+            logger.error(f"Error getting all agent statuses: {str(e)}")
+            raise
+    
+    # Helper methods for agent system
+    def _convert_db_to_agent_request(self, data: Dict[str, Any]) -> Optional[AgentRequest]:
+        """Convert database row to AgentRequest model"""
+        try:
+            from models.agent import RequestType, RequestPriority, RequestStatus
+            
+            return AgentRequest(
+                id=data["id"],
+                user_id=data["user_id"],
+                request_type=RequestType(data["request_type"]),
+                content=data["content"],
+                context=data["context"],
+                priority=RequestPriority(data["priority"]),
+                created_at=datetime.fromisoformat(data["created_at"].replace("Z", "+00:00")),
+                status=RequestStatus(data["status"]),
+                assigned_agents=data["assigned_agents"],
+                metadata=data["metadata"]
+            )
+            
+        except Exception as e:
+            logger.error(f"Error converting database row to agent request: {str(e)}")
+            return None
+    
+    def _convert_db_to_agent_response(self, data: Dict[str, Any]) -> Optional[AgentResponse]:
+        """Convert database row to AgentResponse model"""
+        try:
+            from models.agent import AgentType
+            
+            return AgentResponse(
+                id=data["id"],
+                request_id=data["request_id"],
+                agent_id=data["agent_id"],
+                agent_type=AgentType(data["agent_type"]),
+                response_content=data["response_content"],
+                confidence_score=data["confidence_score"],
+                processing_time=data["processing_time"],
+                metadata=data["metadata"],
+                created_at=datetime.fromisoformat(data["created_at"].replace("Z", "+00:00"))
+            )
+            
+        except Exception as e:
+            logger.error(f"Error converting database row to agent response: {str(e)}")
+            return None
+    
+    def _convert_db_to_agent_workflow(self, data: Dict[str, Any]) -> Optional[AgentWorkflow]:
+        """Convert database row to AgentWorkflow model"""
+        try:
+            from models.agent import WorkflowStatus, WorkflowStep
+            
+            # Convert workflow steps
+            steps = []
+            for step_data in data.get("workflow_steps", []):
+                steps.append(WorkflowStep(**step_data))
+            
+            return AgentWorkflow(
+                id=data["id"],
+                request_id=data["request_id"],
+                orchestrator_id=data["orchestrator_id"],
+                participating_agents=data["participating_agents"],
+                workflow_steps=steps,
+                current_step=data["current_step"],
+                status=WorkflowStatus(data["status"]),
+                created_at=datetime.fromisoformat(data["created_at"].replace("Z", "+00:00")),
+                completed_at=datetime.fromisoformat(data["completed_at"].replace("Z", "+00:00")) if data.get("completed_at") else None,
+                metadata=data["metadata"]
+            )
+            
+        except Exception as e:
+            logger.error(f"Error converting database row to agent workflow: {str(e)}")
+            return None
+    
+    def _convert_db_to_agent_status(self, data: Dict[str, Any]) -> Optional[AgentStatus]:
+        """Convert database row to AgentStatus model"""
+        try:
+            from models.agent import AgentType, AgentCapability
+            
+            # Convert capabilities
+            capabilities = []
+            for cap_data in data.get("capabilities", []):
+                capabilities.append(AgentCapability(**cap_data))
+            
+            return AgentStatus(
+                agent_id=data["agent_id"],
+                agent_type=AgentType(data["agent_type"]),
+                is_active=data["is_active"],
+                current_load=data["current_load"],
+                max_concurrent_requests=data["max_concurrent_requests"],
+                capabilities=capabilities,
+                last_heartbeat=datetime.fromisoformat(data["last_heartbeat"].replace("Z", "+00:00")),
+                performance_metrics=data["performance_metrics"]
+            )
+            
+        except Exception as e:
+            logger.error(f"Error converting database row to agent status: {str(e)}")
+            return None
+    
+    async def _workflow_exists(self, workflow_id: str) -> bool:
+        """Check if a workflow exists"""
+        try:
+            result = self.supabase.table("agent_workflows").select("id").eq("id", workflow_id).execute()
+            return bool(result.data)
+        except:
+            return False

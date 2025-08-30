@@ -5,7 +5,7 @@ import { useAuth } from '@/lib/auth-context'
 import { RoadmapRequest, CareerSuggestion, RoadmapGenerationResponse } from '@/types/roadmap'
 import { ApiErrorBoundary } from '@/components/error/ApiErrorBoundary'
 import { ErrorDisplay } from '@/components/ui/ErrorDisplay'
-import { RoadmapLoadingState } from '@/components/ui/LoadingState'
+import { RoadmapGenerationLoader } from '@/components/ui/WaveformLoader'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { useAsyncOperation } from '@/hooks/useAsyncOperation'
 
@@ -347,7 +347,7 @@ export function RoadmapGenerator({
         {/* Generate Button */}
         <div className="pt-4">
           {generateRoadmapOp.loading ? (
-            <RoadmapLoadingState progress={generateRoadmapOp.progress} />
+            <RoadmapGenerationLoader progress={generateRoadmapOp.progress} />
           ) : (
             <button
               onClick={handleGenerateRoadmap}

@@ -5,26 +5,42 @@ A career navigation platform that provides personalized, AI-generated feedback a
 ## Project Structure
 
 ```
-├── frontend/          # Next.js React application
+├── 📚 docs/                    # Comprehensive documentation
+│   ├── setup/                 # Setup & configuration guides
+│   ├── architecture/          # System architecture docs
+│   ├── testing/               # Testing documentation
+│   └── guides/                # Best practices & guides
+├── 🔧 backend/                # FastAPI Python backend
+│   ├── api/                   # API route handlers
+│   ├── models/                # Data models & schemas
+│   ├── services/              # Business logic services
+│   ├── migrations/            # Database migrations
+│   ├── tests/                 # Comprehensive test suite
+│   │   ├── unit/              # Unit tests with mocks
+│   │   ├── integration/       # Integration tests
+│   │   └── e2e/               # End-to-end tests
+│   └── config/                # Configuration files
+├── 🎨 frontend/               # Next.js React application
 │   ├── src/
-│   │   ├── app/       # Next.js app router pages
-│   │   ├── components/
-│   │   │   ├── auth/      # Authentication components
-│   │   │   ├── chat/      # AI chat interface
-│   │   │   ├── onboarding/# User onboarding flow
-│   │   │   └── roadmap/   # Career roadmap display
-│   │   └── lib/       # Utility functions and configurations
+│   │   ├── app/               # Next.js app router pages
+│   │   ├── components/        # React components
+│   │   │   ├── auth/          # Authentication components
+│   │   │   ├── chat/          # AI chat interface
+│   │   │   ├── onboarding/    # User onboarding flow
+│   │   │   └── roadmap/       # Career roadmap display
+│   │   ├── lib/               # Utility functions
+│   │   └── hooks/             # Custom React hooks
 │   └── package.json
-├── backend/           # FastAPI Python backend
-│   ├── api/           # API route handlers
-│   ├── models/        # Data models
-│   ├── services/      # Business logic services
-│   ├── main.py        # FastAPI application entry point
-│   ├── requirements.txt
-│   └── Dockerfile
-├── docker-compose.yml # Container orchestration
-└── .kiro/specs/       # Feature specifications and tasks
+├── 🧪 Testing & Setup Scripts
+│   ├── run_storage_tests.py   # Comprehensive test runner
+│   ├── setup_supabase.py      # Supabase setup automation
+│   └── check_test_status.py   # Quick status checker
+└── 🐳 Infrastructure
+    ├── docker-compose.yml     # Container orchestration
+    └── .kiro/specs/           # Feature specifications
 ```
+
+For detailed structure information, see [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md).
 
 ## Technology Stack
 
@@ -105,10 +121,68 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 
 ### Backend (.env)
 ```
+# Database Configuration
 SUPABASE_URL=your_supabase_url
-SUPABASE_KEY=your_supabase_service_key
-HUGGINGFACE_API_KEY=your_huggingface_api_key
+SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+
+# AI Service Configuration
+GEMINI_API_KEY=your_gemini_api_key
+OPENROUTER_API_KEY=your_openrouter_api_key
+
+# Storage Configuration (NEW!)
+STORAGE_PROVIDER=supabase
+
+# ChromaDB Configuration
+CHROMA_HOST=localhost
+CHROMA_PORT=8000
 ```
+
+## 🚀 Supabase Storage Setup
+
+GoalTrajectory.ai now uses **Supabase Storage** for resume uploads with intelligent quota management!
+
+### Quick Setup
+
+1. **Run the setup script:**
+   ```bash
+   python setup_supabase.py
+   ```
+
+2. **Create the storage bucket:**
+   - Go to your Supabase dashboard
+   - Navigate to **Storage** section
+   - Create a new bucket named `resumes`
+   - Set it to **Private** (not public)
+
+3. **Set up security policies:**
+   ```bash
+   python setup_supabase.py --sql
+   ```
+   Copy the output and run it in your Supabase SQL Editor.
+
+4. **Test the integration:**
+   ```bash
+   python test_storage_integration.py
+   ```
+
+### 🎯 Features
+
+- **Smart Quota Management**: Automatically handles free tier limits
+- **User Notifications**: Clear messages when storage limits are reached
+- **Temporary Storage**: Files are processed then deleted when limits reached
+- **Secure Access**: Row-level security with user-specific file access
+- **Automatic Cleanup**: Old temporary files are automatically removed
+
+### 📊 Storage Modes
+
+- **🟢 Persistent**: Normal operation (< 80% usage)
+- **🟡 Warning**: Approaching limits (80-90% usage)  
+- **🔴 Temporary**: Limits reached (> 90% usage) - files deleted after processing
+
+When storage limits are reached, users see a friendly message explaining that their resume will be processed but then deleted to save space, with an option to email for storage upgrades.
+
+For detailed setup instructions, see [docs/setup/](docs/setup/).
 
 ## Contributing
 

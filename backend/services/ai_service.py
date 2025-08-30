@@ -74,6 +74,10 @@ class AIService:
             max_concurrent_requests: Maximum concurrent requests
             default_timeout: Default timeout for requests in seconds
         """
+        # Load environment variables if not already loaded
+        from dotenv import load_dotenv
+        load_dotenv('.env')
+        
         # API keys
         self.gemini_api_key = gemini_api_key or os.getenv("GEMINI_API_KEY")
         self.openrouter_api_key = openrouter_api_key or os.getenv("OPENROUTER_API_KEY")

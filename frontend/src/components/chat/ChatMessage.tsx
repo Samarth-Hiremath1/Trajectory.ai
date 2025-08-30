@@ -1,8 +1,9 @@
 'use client'
 
-import { ChatMessage as ChatMessageType, MessageRole } from '@/types/chat'
+import { ChatMessage as ChatMessageType, MessageRole, AgentContribution } from '@/types/chat'
 import { formatDistanceToNow } from '@/lib/utils'
 import { FormattedAIResponse } from './FormattedAIResponse'
+
 
 interface ChatMessageProps {
   message: ChatMessageType
@@ -53,6 +54,9 @@ export function ChatMessage({ message }: ChatMessageProps) {
               <span>✓ Sent</span>
             </div>
           )}
+
+          {/* Agent contributions for AI messages */}
+
 
           {/* Context indicator for AI messages */}
           {isAssistant && (

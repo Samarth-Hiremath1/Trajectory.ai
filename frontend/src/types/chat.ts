@@ -4,12 +4,22 @@ export enum MessageRole {
   SYSTEM = "system"
 }
 
+export interface AgentContribution {
+  agentType: string
+  agentId: string
+  contribution: string
+  confidenceScore: number
+  processingTime: number
+}
+
 export interface ChatMessage {
   id: string
   role: MessageRole
   content: string
   timestamp: Date
-  metadata: Record<string, unknown>
+  metadata: Record<string, unknown> & {
+    agentContributions?: AgentContribution[]
+  }
 }
 
 export interface ChatSession {

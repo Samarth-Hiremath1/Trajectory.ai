@@ -22,6 +22,17 @@ except ImportError:
     get_embedding_service = None
     EMBEDDING_AVAILABLE = False
 
+# Multi-Agent System import
+try:
+    from services.multi_agent_service import get_multi_agent_service, MultiAgentService
+    from models.agent import RequestType
+    MULTI_AGENT_AVAILABLE = True
+except ImportError:
+    get_multi_agent_service = None
+    MultiAgentService = None
+    RequestType = None
+    MULTI_AGENT_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 class RoadmapService:
@@ -32,6 +43,7 @@ class RoadmapService:
         self.scraper = None
         self.embedding_service = None
         self.db_service = DatabaseService()
+        self.multi_agent_service = None
     
     async def _init_services(self):
         """Initialize required services"""
@@ -45,6 +57,13 @@ class RoadmapService:
             except Exception as e:
                 logger.warning(f"Could not initialize embedding service: {str(e)}")
                 self.embedding_service = None
+        if not self.multi_agent_service and MULTI_AGENT_AVAILABLE:
+            try:
+                self.multi_agent_service = await get_multi_agent_service()
+                logger.info("Multi-Agent Service initialized for roadmap service")
+            except Exception as e:
+                logger.warning(f"Could not initialize multi-agent service: {str(e)}")
+                self.multi_agent_service = None
     
     def _create_roadmap_generation_prompt(
         self,
@@ -580,6 +599,23 @@ Keep explanations concise and actionable. Always reference the user's constraint
         
         return analysis
     
+    def _should_use_multi_agent_for_roadmap(self, request: RoadmapRequest) -> bool:
+        """Determine if roadmap generation should use multi-agent system"""
+        if not MULTI_AGENT_AVAILABLE or not self.multi_agent_service:
+            return False
+        
+        # Use multi-agent system for complex requests
+        complexity_indicators = [
+            len(request.focus_areas or []) > 2,  # Multiple focus areas
+            len(request.constraints or []) > 1,  # Multiple constraints
+            request.timeline_preference and ("month" in request.timeline_preference.lower()),  # Specific timeline
+            len(request.user_background or "") > 200,  # Detailed background
+            request.current_role.lower() != request.target_role.lower()  # Career transition
+        ]
+        
+        # Use multi-agent system if 2 or more complexity indicators are present
+        return sum(1 for indicator in complexity_indicators if indicator) >= 2
+
     async def generate_roadmap(
         self,
         request: RoadmapRequest,
@@ -593,66 +629,16 @@ Keep explanations concise and actionable. Always reference the user's constraint
         try:
             await self._init_services()
             
-            # Generate strengths and weaknesses analysis first
-            strengths_analysis = await self._generate_strengths_weaknesses_analysis(
-                request, user_context
-            )
+            # Check if we should use multi-agent system generation
+            if self._should_use_multi_agent_for_roadmap(request):
+                try:
+                    return await self._generate_roadmap_with_multi_agent_system(request, user_id, user_context, start_time)
+                except Exception as multi_agent_error:
+                    logger.warning(f"Multi-agent roadmap generation failed, falling back to direct generation: {multi_agent_error}")
+                    # Fall back to direct generation
             
-            # Get learning resources from scraper
-            learning_resources = await self.scraper.get_resources_for_transition(
-                request.current_role,
-                request.target_role,
-                max_resources=15
-            )
-            
-            # Enhance user background with context if available
-            enhanced_background = request.user_background or ""
-            if user_context:
-                resume_context = user_context.get('resume_summary', '')
-                if resume_context:
-                    enhanced_background += f"\n\nResume Summary: {resume_context}"
-            
-            # Create generation prompt
-            prompt = self._create_roadmap_generation_prompt(
-                current_role=request.current_role,
-                target_role=request.target_role,
-                user_background=enhanced_background,
-                timeline_preference=request.timeline_preference,
-                focus_areas=request.focus_areas,
-                constraints=request.constraints,
-                learning_resources=learning_resources
-            )
-            
-            # Generate roadmap using AI service
-            response = await self.ai_service.generate_text(
-                prompt=prompt,
-                model_type=ModelType.GEMINI_FLASH,  # Use fast model for roadmap generation
-                max_tokens=2000,
-                temperature=0.7
-            )
-            
-            # Parse response into structured roadmap
-            roadmap = self._parse_roadmap_response(response, request)
-            roadmap.user_id = user_id
-            roadmap.generation_prompt = prompt[:500] + "..." if len(prompt) > 500 else prompt
-            
-            # Ensure each phase has at least 3 milestones
-            await self._ensure_minimum_milestones(roadmap)
-            
-            # Enhance with scraped learning resources
-            self._enhance_roadmap_with_resources(roadmap, learning_resources)
-            
-            generation_time = (datetime.utcnow() - start_time).total_seconds()
-            
-            logger.info(f"Generated roadmap for {user_id}: {request.current_role} → {request.target_role}")
-            
-            return RoadmapGenerationResult(
-                success=True,
-                roadmap=roadmap,
-                generation_time_seconds=generation_time,
-                model_used="Gemini Flash",
-                strengths_analysis=strengths_analysis
-            )
+            # Direct roadmap generation (existing logic)
+            return await self._generate_roadmap_direct(request, user_id, user_context, start_time)
             
         except Exception as e:
             logger.error(f"Error generating roadmap: {str(e)}")
@@ -663,6 +649,588 @@ Keep explanations concise and actionable. Always reference the user's constraint
                 error_message=str(e),
                 generation_time_seconds=generation_time
             )
+    
+    async def _generate_roadmap_with_multi_agent_system(
+        self,
+        request: RoadmapRequest,
+        user_id: str,
+        user_context: Optional[Dict[str, Any]],
+        start_time: datetime
+    ) -> RoadmapGenerationResult:
+        """Generate roadmap using optimized Multi-Agent System with LangGraph workflows"""
+        
+        # Prepare request content for multi-agent system
+        request_content = {
+            "current_role": request.current_role,
+            "target_role": request.target_role,
+            "user_background": request.user_background,
+            "timeline_preference": request.timeline_preference,
+            "focus_areas": request.focus_areas or [],
+            "constraints": request.constraints or [],
+            "user_context": user_context or {},
+            "user_id": user_id
+        }
+        
+        # Use LangGraph workflow for comprehensive roadmap generation
+        try:
+            result = await self.multi_agent_service.execute_career_transition_workflow(
+                user_id=user_id,
+                current_role=request.current_role,
+                target_role=request.target_role,
+                timeline=request.timeline_preference or "12 months",
+                constraints={
+                    "focus_areas": request.focus_areas or [],
+                    "constraints": request.constraints or [],
+                    "user_background": request.user_background
+                }
+            )
+        except Exception as workflow_error:
+            logger.warning(f"LangGraph workflow failed, falling back to standard multi-agent: {workflow_error}")
+            # Fallback to standard multi-agent processing
+            result = await self.multi_agent_service.process_request(
+                user_id=user_id,
+                request_type=RequestType.ROADMAP_GENERATION,
+                content=request_content,
+                context=user_context or {}
+            )
+        
+        if result["success"]:
+            # Extract roadmap from multi-agent result
+            final_response = result.get("final_response", {})
+            
+            # Convert multi-agent response to roadmap with enhanced processing
+            roadmap = await self._convert_multi_agent_response_to_roadmap(
+                final_response, request, user_id
+            )
+            
+            generation_time = (datetime.utcnow() - start_time).total_seconds()
+            
+            # Extract comprehensive analysis from multi-agent response
+            strengths_analysis = self._extract_comprehensive_analysis(final_response)
+            
+            logger.info(f"Generated roadmap using optimized multi-agent system for {user_id}: {request.current_role} → {request.target_role} in {generation_time:.2f}s")
+            
+            return RoadmapGenerationResult(
+                success=True,
+                roadmap=roadmap,
+                generation_time_seconds=generation_time,
+                model_used="Multi-Agent LangGraph Workflow",
+                strengths_analysis=strengths_analysis
+            )
+        else:
+            raise Exception(f"Multi-agent processing failed: {result.get('error', 'Unknown error')}")
+    
+    async def _generate_roadmap_direct(
+        self,
+        request: RoadmapRequest,
+        user_id: str,
+        user_context: Optional[Dict[str, Any]],
+        start_time: datetime
+    ) -> RoadmapGenerationResult:
+        """Generate roadmap using direct AI service (existing logic)"""
+        
+        # Generate strengths and weaknesses analysis first
+        strengths_analysis = await self._generate_strengths_weaknesses_analysis(
+            request, user_context
+        )
+        
+        # Get learning resources from scraper
+        learning_resources = await self.scraper.get_resources_for_transition(
+            request.current_role,
+            request.target_role,
+            max_resources=15
+        )
+        
+        # Enhance user background with context if available
+        enhanced_background = request.user_background or ""
+        if user_context:
+            resume_context = user_context.get('resume_summary', '')
+            if resume_context:
+                enhanced_background += f"\n\nResume Summary: {resume_context}"
+        
+        # Create generation prompt
+        prompt = self._create_roadmap_generation_prompt(
+            current_role=request.current_role,
+            target_role=request.target_role,
+            user_background=enhanced_background,
+            timeline_preference=request.timeline_preference,
+            focus_areas=request.focus_areas,
+            constraints=request.constraints,
+            learning_resources=learning_resources
+        )
+        
+        # Generate roadmap using AI service
+        response = await self.ai_service.generate_text(
+            prompt=prompt,
+            model_type=ModelType.GEMINI_FLASH,  # Use fast model for roadmap generation
+            max_tokens=2000,
+            temperature=0.7
+        )
+        
+        # Parse response into structured roadmap
+        roadmap = self._parse_roadmap_response(response, request)
+        roadmap.user_id = user_id
+        roadmap.generation_prompt = prompt[:500] + "..." if len(prompt) > 500 else prompt
+        
+        # Ensure each phase has at least 3 milestones
+        await self._ensure_minimum_milestones(roadmap)
+        
+        # Enhance with scraped learning resources
+        self._enhance_roadmap_with_resources(roadmap, learning_resources)
+        
+        generation_time = (datetime.utcnow() - start_time).total_seconds()
+        
+        logger.info(f"Generated roadmap for {user_id}: {request.current_role} → {request.target_role}")
+        
+        return RoadmapGenerationResult(
+            success=True,
+            roadmap=roadmap,
+            generation_time_seconds=generation_time,
+            model_used="Gemini Flash",
+            strengths_analysis=strengths_analysis
+        )
+    
+    async def _convert_multi_agent_response_to_roadmap(
+        self,
+        multi_agent_response: Dict[str, Any],
+        request: RoadmapRequest,
+        user_id: str
+    ) -> Roadmap:
+        """Convert multi-agent response to structured Roadmap object"""
+        
+        # If the response is a synthesized response, try to parse it as JSON
+        if isinstance(multi_agent_response, dict) and "synthesized_response" in multi_agent_response:
+            try:
+                # Try to parse the synthesized response as a roadmap
+                synthesized = multi_agent_response["synthesized_response"]
+                if isinstance(synthesized, str):
+                    # Try to extract JSON from the response
+                    import re
+                    json_match = re.search(r'\{.*\}', synthesized, re.DOTALL)
+                    if json_match:
+                        parsed_roadmap = json.loads(json_match.group())
+                        return self._create_roadmap_from_parsed_data(parsed_roadmap, request, user_id)
+                elif isinstance(synthesized, dict):
+                    return self._create_roadmap_from_parsed_data(synthesized, request, user_id)
+            except Exception as e:
+                logger.warning(f"Failed to parse synthesized response as roadmap: {e}")
+        
+        # Fallback: create a basic roadmap structure
+        return self._create_fallback_roadmap(multi_agent_response, request, user_id)
+    
+    def _create_roadmap_from_parsed_data(
+        self,
+        parsed_data: Dict[str, Any],
+        request: RoadmapRequest,
+        user_id: str
+    ) -> Roadmap:
+        """Create roadmap from parsed JSON data"""
+        
+        # Create roadmap title
+        title = parsed_data.get("title", f"{request.current_role} to {request.target_role} Roadmap")
+        
+        # Create description
+        description = parsed_data.get("description", "Career transition roadmap generated by multi-agent system")
+        
+        # Create phases from parsed data
+        phases = []
+        phases_data = parsed_data.get("phases", [])
+        
+        for i, phase_data in enumerate(phases_data):
+            phase = RoadmapPhase(
+                name=phase_data.get("name", f"Phase {i+1}"),
+                description=phase_data.get("description", ""),
+                duration_weeks=phase_data.get("duration_weeks", 4),
+                skills=[],
+                milestones=[],
+                learning_resources=[]
+            )
+            
+            # Add skills
+            for skill_data in phase_data.get("skills", []):
+                if isinstance(skill_data, str):
+                    skill = Skill(name=skill_data, level=SkillLevel.INTERMEDIATE)
+                else:
+                    skill = Skill(
+                        name=skill_data.get("name", ""),
+                        level=SkillLevel(skill_data.get("level", "intermediate")),
+                        description=skill_data.get("description", "")
+                    )
+                phase.skills.append(skill)
+            
+            # Add milestones
+            for milestone_data in phase_data.get("milestones", []):
+                if isinstance(milestone_data, str):
+                    milestone = Milestone(
+                        title=milestone_data,
+                        description="",
+                        week=1
+                    )
+                else:
+                    milestone = Milestone(
+                        title=milestone_data.get("title", ""),
+                        description=milestone_data.get("description", ""),
+                        week=milestone_data.get("week", 1)
+                    )
+                phase.milestones.append(milestone)
+            
+            phases.append(phase)
+        
+        # Create roadmap
+        roadmap = Roadmap(
+            user_id=user_id,
+            title=title,
+            description=description,
+            current_role=request.current_role,
+            target_role=request.target_role,
+            phases=phases,
+            total_duration_weeks=sum(phase.duration_weeks for phase in phases),
+            created_at=datetime.utcnow()
+        )
+        
+        return roadmap
+    
+    def _create_fallback_roadmap(
+        self,
+        multi_agent_response: Dict[str, Any],
+        request: RoadmapRequest,
+        user_id: str
+    ) -> Roadmap:
+        """Create a fallback roadmap when parsing fails"""
+        
+        # Create a basic 3-phase roadmap
+        phases = [
+            RoadmapPhase(
+                name="Foundation Phase",
+                description="Build foundational skills and knowledge",
+                duration_weeks=4,
+                skills=[Skill(name="Core Skills", level=SkillLevel.BEGINNER)],
+                milestones=[
+                    Milestone(title="Complete initial assessment", description="", week=1),
+                    Milestone(title="Start learning core concepts", description="", week=2),
+                    Milestone(title="Practice fundamental skills", description="", week=4)
+                ],
+                learning_resources=[]
+            ),
+            RoadmapPhase(
+                name="Development Phase", 
+                description="Develop intermediate skills and experience",
+                duration_weeks=8,
+                skills=[Skill(name="Intermediate Skills", level=SkillLevel.INTERMEDIATE)],
+                milestones=[
+                    Milestone(title="Complete intermediate projects", description="", week=2),
+                    Milestone(title="Build portfolio", description="", week=4),
+                    Milestone(title="Gain practical experience", description="", week=8)
+                ],
+                learning_resources=[]
+            ),
+            RoadmapPhase(
+                name="Mastery Phase",
+                description="Achieve advanced proficiency and transition readiness",
+                duration_weeks=4,
+                skills=[Skill(name="Advanced Skills", level=SkillLevel.ADVANCED)],
+                milestones=[
+                    Milestone(title="Complete advanced projects", description="", week=2),
+                    Milestone(title="Prepare for transition", description="", week=3),
+                    Milestone(title="Ready for new role", description="", week=4)
+                ],
+                learning_resources=[]
+            )
+        ]
+        
+        roadmap = Roadmap(
+            user_id=user_id,
+            title=f"{request.current_role} to {request.target_role} Roadmap",
+            description="Career transition roadmap generated by multi-agent system",
+            current_role=request.current_role,
+            target_role=request.target_role,
+            phases=phases,
+            total_duration_weeks=16,
+            created_at=datetime.utcnow()
+        )
+        
+        return roadmap
+
+    async def _convert_workflow_response_to_roadmap(
+        self,
+        workflow_response: Dict[str, Any],
+        request: RoadmapRequest,
+        user_id: str
+    ) -> Roadmap:
+        """Convert workflow response to structured Roadmap object (legacy method)"""
+        
+        # This method is kept for backward compatibility
+        # but should be replaced with multi-agent system
+        return await self._convert_multi_agent_response_to_roadmap(workflow_response, request, user_id)
+        phases = await self._create_phases_from_workflow_outputs(
+            career_strategy, skills_analysis, learning_resources, request
+        )
+        
+        # Calculate total timeline
+        total_weeks = sum(phase.duration_weeks for phase in phases)
+        
+        # Create roadmap
+        roadmap = Roadmap(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            title=title,
+            description=description,
+            current_role=request.current_role,
+            target_role=request.target_role,
+            phases=phases,
+            total_estimated_weeks=total_weeks,
+            generated_with_model="Multi-Agent Workflow",
+            user_context_used={
+                "background": request.user_background,
+                "timeline_preference": request.timeline_preference,
+                "focus_areas": request.focus_areas,
+                "constraints": request.constraints,
+                "workflow_used": True
+            }
+        )
+        
+        return roadmap
+    
+    async def _create_phases_from_workflow_outputs(
+        self,
+        career_strategy: Dict[str, Any],
+        skills_analysis: Dict[str, Any],
+        learning_resources: Dict[str, Any],
+        request: RoadmapRequest
+    ) -> List[RoadmapPhase]:
+        """Create roadmap phases from multi-agent workflow outputs"""
+        
+        phases = []
+        
+        # Get recommended phases from career strategy
+        strategy_phases = career_strategy.get("recommended_phases", [])
+        skill_gaps = skills_analysis.get("skill_gaps", [])
+        recommended_resources = learning_resources.get("recommended_resources", [])
+        
+        # If we have structured phases from workflow, use them
+        if strategy_phases:
+            for i, phase_data in enumerate(strategy_phases[:6]):  # Limit to 6 phases
+                phase = await self._create_phase_from_workflow_data(
+                    phase_data, i + 1, skill_gaps, recommended_resources
+                )
+                phases.append(phase)
+        else:
+            # Create default phases based on skill gaps and resources
+            phases = await self._create_default_phases_from_workflow(
+                skill_gaps, recommended_resources, request
+            )
+        
+        return phases
+    
+    async def _create_phase_from_workflow_data(
+        self,
+        phase_data: Dict[str, Any],
+        phase_number: int,
+        skill_gaps: List[Dict[str, Any]],
+        resources: List[Dict[str, Any]]
+    ) -> RoadmapPhase:
+        """Create a roadmap phase from workflow phase data"""
+        
+        # Extract phase information
+        title = phase_data.get("title", f"Phase {phase_number}")
+        description = phase_data.get("description", "")
+        duration_weeks = phase_data.get("duration_weeks", 4)
+        
+        # Create skills from phase data and skill gaps
+        skills = []
+        phase_skills = phase_data.get("skills", [])
+        for skill_name in phase_skills:
+            # Find matching skill gap for more details
+            skill_gap = next((gap for gap in skill_gaps if gap.get("skill", "").lower() == skill_name.lower()), {})
+            
+            skill = Skill(
+                name=skill_name,
+                description=skill_gap.get("description", ""),
+                current_level=self._parse_skill_level(skill_gap.get("current_level", "beginner")),
+                target_level=self._parse_skill_level(skill_gap.get("target_level", "intermediate")),
+                priority=skill_gap.get("priority", 3)
+            )
+            skills.append(skill)
+        
+        # Create learning resources for this phase
+        phase_resources = []
+        phase_resource_names = phase_data.get("resources", [])
+        for resource_name in phase_resource_names:
+            # Find matching resource
+            resource_data = next((res for res in resources if res.get("title", "").lower() == resource_name.lower()), {})
+            
+            if resource_data:
+                resource = LearningResource(
+                    title=resource_data.get("title", resource_name),
+                    description=resource_data.get("description", ""),
+                    url=resource_data.get("url", ""),
+                    resource_type=ResourceType.COURSE,  # Default type
+                    provider=resource_data.get("provider", ""),
+                    duration=resource_data.get("duration", ""),
+                    skills_covered=resource_data.get("skills_covered", [])
+                )
+                phase_resources.append(resource)
+        
+        # Create milestones
+        milestones = []
+        phase_milestones = phase_data.get("milestones", [])
+        for i, milestone_data in enumerate(phase_milestones):
+            if isinstance(milestone_data, str):
+                milestone = Milestone(
+                    title=milestone_data,
+                    description=f"Complete {milestone_data}",
+                    estimated_completion_weeks=i + 1
+                )
+            else:
+                milestone = Milestone(
+                    title=milestone_data.get("title", f"Milestone {i + 1}"),
+                    description=milestone_data.get("description", ""),
+                    estimated_completion_weeks=milestone_data.get("week", i + 1),
+                    success_criteria=milestone_data.get("success_criteria", []),
+                    deliverables=milestone_data.get("deliverables", [])
+                )
+            milestones.append(milestone)
+        
+        # Ensure minimum 3 milestones
+        while len(milestones) < 3:
+            milestones.append(Milestone(
+                title=f"Milestone {len(milestones) + 1}",
+                description=f"Complete phase {phase_number} objectives",
+                estimated_completion_weeks=len(milestones) + 1
+            ))
+        
+        return RoadmapPhase(
+            phase_number=phase_number,
+            title=title,
+            description=description,
+            duration_weeks=duration_weeks,
+            skills_to_develop=skills,
+            learning_resources=phase_resources,
+            milestones=milestones,
+            prerequisites=phase_data.get("prerequisites", []),
+            outcomes=phase_data.get("outcomes", [])
+        )
+    
+    async def _create_default_phases_from_workflow(
+        self,
+        skill_gaps: List[Dict[str, Any]],
+        resources: List[Dict[str, Any]],
+        request: RoadmapRequest
+    ) -> List[RoadmapPhase]:
+        """Create default phases when workflow doesn't provide structured phases"""
+        
+        phases = []
+        
+        # Group skills by priority/category
+        high_priority_skills = [gap for gap in skill_gaps if gap.get("priority", 3) >= 4]
+        medium_priority_skills = [gap for gap in skill_gaps if gap.get("priority", 3) == 3]
+        low_priority_skills = [gap for gap in skill_gaps if gap.get("priority", 3) <= 2]
+        
+        # Create phases based on skill priorities
+        if high_priority_skills:
+            phase1 = await self._create_skills_phase(
+                "Foundation Skills", high_priority_skills, resources, 1, 4
+            )
+            phases.append(phase1)
+        
+        if medium_priority_skills:
+            phase2 = await self._create_skills_phase(
+                "Core Development", medium_priority_skills, resources, 2, 6
+            )
+            phases.append(phase2)
+        
+        if low_priority_skills:
+            phase3 = await self._create_skills_phase(
+                "Advanced Skills", low_priority_skills, resources, 3, 4
+            )
+            phases.append(phase3)
+        
+        # Add a final integration phase
+        integration_phase = RoadmapPhase(
+            phase_number=len(phases) + 1,
+            title="Integration & Application",
+            description=f"Apply learned skills in real-world projects and prepare for {request.target_role} role",
+            duration_weeks=4,
+            skills_to_develop=[],
+            learning_resources=[],
+            milestones=[
+                Milestone(title="Complete capstone project", estimated_completion_weeks=2),
+                Milestone(title="Build portfolio", estimated_completion_weeks=3),
+                Milestone(title="Practice interviews", estimated_completion_weeks=4)
+            ],
+            prerequisites=["Complete previous phases"],
+            outcomes=[f"Ready to apply for {request.target_role} positions"]
+        )
+        phases.append(integration_phase)
+        
+        return phases
+    
+    async def _create_skills_phase(
+        self,
+        title: str,
+        skill_gaps: List[Dict[str, Any]],
+        resources: List[Dict[str, Any]],
+        phase_number: int,
+        duration_weeks: int
+    ) -> RoadmapPhase:
+        """Create a phase focused on specific skills"""
+        
+        # Create skills
+        skills = []
+        for gap in skill_gaps[:5]:  # Limit to 5 skills per phase
+            skill = Skill(
+                name=gap.get("skill", "Unknown Skill"),
+                description=gap.get("description", ""),
+                current_level=self._parse_skill_level(gap.get("current_level", "beginner")),
+                target_level=self._parse_skill_level(gap.get("target_level", "intermediate")),
+                priority=gap.get("priority", 3)
+            )
+            skills.append(skill)
+        
+        # Find relevant resources
+        phase_resources = []
+        for resource_data in resources[:3]:  # Limit to 3 resources per phase
+            resource = LearningResource(
+                title=resource_data.get("title", "Learning Resource"),
+                description=resource_data.get("description", ""),
+                url=resource_data.get("url", ""),
+                resource_type=ResourceType.COURSE,
+                provider=resource_data.get("provider", ""),
+                duration=resource_data.get("duration", ""),
+                skills_covered=resource_data.get("skills_covered", [])
+            )
+            phase_resources.append(resource)
+        
+        # Create milestones
+        milestones = [
+            Milestone(
+                title=f"Master {skills[0].name if skills else 'core concepts'}",
+                description=f"Achieve proficiency in key {title.lower()} concepts",
+                estimated_completion_weeks=2
+            ),
+            Milestone(
+                title="Complete practical exercises",
+                description="Apply learned concepts through hands-on practice",
+                estimated_completion_weeks=duration_weeks - 1
+            ),
+            Milestone(
+                title="Phase assessment",
+                description="Demonstrate mastery of phase objectives",
+                estimated_completion_weeks=duration_weeks
+            )
+        ]
+        
+        return RoadmapPhase(
+            phase_number=phase_number,
+            title=title,
+            description=f"Focus on developing {title.lower()} essential for career transition",
+            duration_weeks=duration_weeks,
+            skills_to_develop=skills,
+            learning_resources=phase_resources,
+            milestones=milestones,
+            prerequisites=[],
+            outcomes=[f"Proficiency in {title.lower()}"]
+        )
     
     def _calculate_target_milestone_count(self, phase: RoadmapPhase) -> int:
         """Calculate the target number of milestones for a phase based on duration and complexity"""
@@ -860,4 +1428,80 @@ async def get_roadmap_service() -> RoadmapService:
     if _roadmap_service_instance is None:
         _roadmap_service_instance = RoadmapService()
     
-    return _roadmap_service_instance
+    return _roadmap_service_instance 
+   def _extract_comprehensive_analysis(self, final_response: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract comprehensive analysis from multi-agent response"""
+        analysis = {}
+        
+        try:
+            # Extract from workflow response
+            if "career_strategy" in final_response:
+                career_data = final_response["career_strategy"]
+                if isinstance(career_data, dict):
+                    analysis["strategic_insights"] = career_data.get("strategic_insights", {})
+                    analysis["market_analysis"] = career_data.get("market_insights", {})
+            
+            if "skills_analysis" in final_response:
+                skills_data = final_response["skills_analysis"]
+                if isinstance(skills_data, dict):
+                    analysis["skill_gaps"] = skills_data.get("skill_gaps", {})
+                    analysis["transferable_skills"] = skills_data.get("transferable_skills", {})
+            
+            if "learning_resources" in final_response:
+                learning_data = final_response["learning_resources"]
+                if isinstance(learning_data, dict):
+                    analysis["learning_path"] = learning_data.get("learning_path", {})
+                    analysis["resource_recommendations"] = learning_data.get("resource_recommendations", {})
+            
+            # Extract synthesis if available
+            if "synthesis" in final_response:
+                analysis["synthesis"] = final_response["synthesis"]
+            
+            # Fallback to legacy format
+            if not analysis and "individual_responses" in final_response:
+                for response in final_response["individual_responses"]:
+                    if isinstance(response, dict) and "strengths_analysis" in response:
+                        analysis["strengths_analysis"] = response["strengths_analysis"]
+                        break
+        
+        except Exception as e:
+            logger.warning(f"Failed to extract comprehensive analysis: {e}")
+            analysis = {"extraction_error": str(e)}
+        
+        return analysis    def _s
+hould_use_cached_response(self, request: RoadmapRequest) -> bool:
+        """Determine if we should use cached response for efficiency"""
+        # For now, we'll cache common role transitions
+        common_transitions = [
+            ("junior software engineer", "senior software engineer"),
+            ("software engineer", "product manager"),
+            ("data analyst", "data scientist"),
+            ("marketing coordinator", "marketing manager"),
+            ("business analyst", "product manager")
+        ]
+        
+        current_lower = request.current_role.lower()
+        target_lower = request.target_role.lower()
+        
+        return any(
+            current_lower in transition[0] and target_lower in transition[1]
+            for transition in common_transitions
+        )
+    
+    def _optimize_llm_usage(self, request: RoadmapRequest) -> Dict[str, Any]:
+        """Optimize LLM usage by reducing token count and using efficient models"""
+        optimization_config = {
+            "use_flash_model": True,  # Use faster, cheaper model for initial generation
+            "max_tokens": 2000,  # Limit token usage
+            "temperature": 0.7,  # Balanced creativity
+            "enable_caching": True,
+            "batch_similar_requests": True
+        }
+        
+        # Adjust based on request complexity
+        complexity_score = len(request.focus_areas or []) + len(request.constraints or [])
+        if complexity_score > 3:
+            optimization_config["max_tokens"] = 2500
+            optimization_config["use_flash_model"] = False  # Use more powerful model for complex requests
+        
+        return optimization_config

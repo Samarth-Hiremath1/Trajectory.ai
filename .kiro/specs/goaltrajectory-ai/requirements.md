@@ -174,3 +174,46 @@ Trajectory.AI is a career navigation platform that provides personalized, AI-gen
 3. WHEN implementing vector storage THEN the system SHALL use ChromaDB instead of paid vector databases
 4. WHEN deploying backend services THEN the system SHALL run all logic inside containers that are Kubernetes-compatible
 5. WHEN scaling the platform THEN the system SHALL support deployment on GKE or Minikube for production orchestration
+
+### Requirement 16
+
+**User Story:** As a user, I want the platform to leverage a multi-agent AI system, so that I can receive specialized, coordinated assistance from different AI agents working together to provide the best career guidance.
+
+#### Acceptance Criteria
+
+1. WHEN a user interacts with the platform THEN the system SHALL coordinate multiple specialized AI agents to provide comprehensive career guidance
+2. WHEN generating roadmaps THEN the system SHALL use a Career Strategy Agent to analyze user background and create strategic career plans
+3. WHEN providing skill assessments THEN the system SHALL use a Skills Analysis Agent to evaluate user competencies and identify gaps
+4. WHEN recommending learning resources THEN the system SHALL use a Learning Resource Agent to curate personalized educational content
+5. WHEN conducting resume analysis THEN the system SHALL use a Resume Optimization Agent to provide specific improvement suggestions
+6. WHEN facilitating career conversations THEN the system SHALL use a Career Mentor Agent to provide personalized coaching and advice
+7. WHEN coordinating agent responses THEN the system SHALL use an Orchestrator Agent to manage agent interactions and ensure coherent responses
+8. WHEN agents need to collaborate THEN the system SHALL enable inter-agent communication to share context and coordinate recommendations
+9. WHEN providing final recommendations THEN the system SHALL synthesize input from multiple agents to deliver comprehensive, well-rounded advice
+
+### Requirement 17
+
+**User Story:** As a user, I want transparent visibility into which AI agents are working on my requests, so that I can understand the specialized expertise being applied to my career development.
+
+#### Acceptance Criteria
+
+1. WHEN agents are processing requests THEN the system SHALL display which specific agents are active and their roles
+2. WHEN agents collaborate THEN the system SHALL show the coordination process and how agents are working together
+3. WHEN receiving recommendations THEN the system SHALL indicate which agents contributed to specific advice or suggestions
+4. WHEN agents have different opinions THEN the system SHALL present multiple perspectives and explain the reasoning behind each
+5. WHEN agent processing fails THEN the system SHALL clearly communicate which agent encountered issues and provide fallback options
+
+### Requirement 18
+
+**User Story:** As a user, I want the platform to use LangGraph for orchestrating complex multi-agent workflows, so that I can benefit from sophisticated workflow management, state persistence, and coordinated agent interactions.
+
+#### Acceptance Criteria
+
+1. WHEN complex requests require multiple agents THEN the system SHALL use LangGraph workflows to orchestrate agent interactions and manage workflow state
+2. WHEN workflows are interrupted or fail THEN the system SHALL use Redis checkpointing to persist workflow state and enable recovery from the last successful step
+3. WHEN generating comprehensive career transitions THEN the system SHALL execute a LangGraph workflow that coordinates Career Strategy, Skills Analysis, and Learning Resource agents in sequence
+4. WHEN enhancing existing roadmaps THEN the system SHALL use LangGraph workflows to systematically improve roadmaps using multiple specialized agents
+5. WHEN workflows are executing THEN the system SHALL provide real-time visibility into workflow progress, current step, and agent activities
+6. WHEN workflows complete THEN the system SHALL aggregate results from all participating agents into a cohesive final response
+7. WHEN workflows encounter errors THEN the system SHALL implement retry logic, fallback strategies, and graceful degradation using LangGraph's error handling capabilities
+8. WHEN workflows need to branch based on conditions THEN the system SHALL use LangGraph's conditional routing to dynamically adjust the workflow path based on user context and agent outputs

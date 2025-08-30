@@ -34,6 +34,17 @@ except ImportError:
     ResumeProcessingService = None
     RESUME_AVAILABLE = False
 
+# Multi-Agent System import
+try:
+    from services.multi_agent_service import get_multi_agent_service, MultiAgentService
+    from models.agent import RequestType
+    MULTI_AGENT_AVAILABLE = True
+except ImportError:
+    get_multi_agent_service = None
+    MultiAgentService = None
+    RequestType = None
+    MULTI_AGENT_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 class RAGChatService:
@@ -47,6 +58,9 @@ class RAGChatService:
         self.embedding_service = EmbeddingService() if EMBEDDING_AVAILABLE else None
         self.resume_service = ResumeProcessingService() if RESUME_AVAILABLE else None
         
+        # Multi-Agent System
+        self.multi_agent_service: Optional[MultiAgentService] = None
+        
         # In-memory session storage for active sessions
         self.active_sessions: Dict[str, ChatSession] = {}
         self.session_memories: Dict[str, ConversationBufferWindowMemory] = {}
@@ -56,13 +70,100 @@ class RAGChatService:
         self.max_context_chunks = 5    # Max RAG context chunks to include
         self.context_similarity_threshold = 0.7  # Minimum similarity for context inclusion
         
-        logger.info(f"RAG Chat Service initialized (Embedding: {EMBEDDING_AVAILABLE}, Resume: {RESUME_AVAILABLE})")
+        # Workflow routing patterns
+        self.workflow_patterns = self._initialize_workflow_patterns()
+        
+        logger.info(f"RAG Chat Service initialized (Embedding: {EMBEDDING_AVAILABLE}, Resume: {RESUME_AVAILABLE}, MultiAgent: {MULTI_AGENT_AVAILABLE})")
     
     async def _get_ai_service(self) -> AIService:
         """Get or initialize AI service"""
         if self.ai_service is None:
             self.ai_service = await get_ai_service()
         return self.ai_service
+    
+    async def _get_multi_agent_service(self) -> Optional[MultiAgentService]:
+        """Get or initialize Multi-Agent Service"""
+        if not MULTI_AGENT_AVAILABLE:
+            return None
+            
+        if self.multi_agent_service is None:
+            try:
+                self.multi_agent_service = await get_multi_agent_service()
+                logger.info("Multi-Agent Service initialized for chat service")
+            except Exception as e:
+                logger.warning(f"Failed to initialize multi-agent service: {e}")
+                return None
+        
+        return self.multi_agent_service
+    
+    def _initialize_workflow_patterns(self) -> Dict[str, Dict[str, Any]]:
+        """Initialize patterns for routing chat requests to workflows"""
+        return {
+            "career_transition": {
+                "keywords": ["transition", "switch careers", "change roles", "move from", "become a"],
+                "workflow": "career_transition",
+                "confidence_threshold": 0.7
+            },
+            "roadmap_generation": {
+                "keywords": ["roadmap", "plan", "path to", "how to become", "steps to"],
+                "workflow": "career_transition",
+                "confidence_threshold": 0.6
+            },
+            "skill_analysis": {
+                "keywords": ["skills", "what skills", "skill gap", "competencies", "abilities"],
+                "workflow": "comprehensive_analysis",
+                "confidence_threshold": 0.5
+            },
+            "comprehensive_analysis": {
+                "keywords": ["analyze", "assessment", "evaluation", "comprehensive", "detailed analysis"],
+                "workflow": "comprehensive_analysis",
+                "confidence_threshold": 0.6
+            }
+        }
+    
+    def _should_use_workflow(self, message: str, user_context: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Determine if a message should be routed through multi-agent system"""
+        if not MULTI_AGENT_AVAILABLE:
+            return None
+        
+        message_lower = message.lower()
+        
+        # Check for workflow patterns
+        for pattern_name, pattern_config in self.workflow_patterns.items():
+            keyword_matches = sum(1 for keyword in pattern_config["keywords"] if keyword in message_lower)
+            confidence = keyword_matches / len(pattern_config["keywords"])
+            
+            if confidence >= pattern_config["confidence_threshold"]:
+                return {
+                    "workflow_name": pattern_config["workflow"],
+                    "pattern_matched": pattern_name,
+                    "confidence": confidence,
+                    "request_type": self._map_pattern_to_request_type(pattern_name)
+                }
+        
+        # Check message length and complexity for comprehensive analysis
+        if len(message.split()) > 20 and any(word in message_lower for word in ["help me", "advice", "guidance", "recommend"]):
+            return {
+                "workflow_name": "comprehensive_analysis",
+                "pattern_matched": "complex_request",
+                "confidence": 0.6,
+                "request_type": RequestType.CAREER_ADVICE
+            }
+        
+        return None
+    
+    def _map_pattern_to_request_type(self, pattern_name: str) -> 'RequestType':
+        """Map workflow pattern to RequestType enum"""
+        if not MULTI_AGENT_AVAILABLE:
+            return None
+            
+        mapping = {
+            "career_transition": RequestType.CAREER_TRANSITION,
+            "roadmap_generation": RequestType.ROADMAP_GENERATION,
+            "skill_analysis": RequestType.SKILL_ANALYSIS,
+            "comprehensive_analysis": RequestType.CAREER_ADVICE
+        }
+        return mapping.get(pattern_name, RequestType.CAREER_ADVICE)
     
     def _create_session_memory(self, session_id: str) -> ConversationBufferWindowMemory:
         """Create LangChain memory for a chat session"""
@@ -326,7 +427,7 @@ CRITICAL: The user background information provided contains their actual resume 
             raise
     
     async def send_message(self, request: ChatMessageRequest) -> ChatResponse:
-        """Send a message and get AI response with RAG context"""
+        """Send a message and get AI response with RAG context or workflow routing"""
         try:
             start_time = datetime.utcnow()
             
@@ -351,7 +452,6 @@ CRITICAL: The user background information provided contains their actual resume 
             memory.chat_memory.add_user_message(request.message)
             
             # Always get user context for personalized responses
-            # This ensures RAG integration is automatic and transparent
             try:
                 context_chunks, context_text = await self._get_user_context(
                     session.user_id, 
@@ -364,29 +464,45 @@ CRITICAL: The user background information provided contains their actual resume 
                 context_chunks = []
                 context_text = "Unable to retrieve user background information at this time. Please provide relevant details about your background and goals for personalized advice."
             
-            # Create prompt template
-            prompt_template = self._create_chat_prompt_template()
+            # Check if request should be routed through workflow
+            user_context = {"context_text": context_text, "context_chunks": context_chunks}
+            workflow_routing = self._should_use_workflow(request.message, user_context)
             
-            # Get AI service
-            ai_service = await self._get_ai_service()
+            ai_response = None
+            workflow_used = False
             
-            # Prepare prompt variables
-            chat_history = memory.chat_memory.messages
+            if workflow_routing:
+                # Route through Multi-Agent System
+                try:
+                    ai_response = await self._process_with_multi_agent_system(
+                        request.message, 
+                        session.user_id, 
+                        workflow_routing, 
+                        user_context
+                    )
+                    workflow_used = True
+                    logger.info(f"Processed message through multi-agent system: {workflow_routing['request_type']}")
+                except Exception as workflow_error:
+                    logger.warning(f"Multi-agent processing failed, falling back to direct AI: {workflow_error}")
+                    # Fall back to direct AI processing
+                    ai_response = None
             
-            # Format the complete prompt
-            formatted_prompt = prompt_template.format(
-                context=context_text,
-                chat_history=chat_history,
-                question=request.message
-            )
+            # If no workflow was used or workflow failed, use direct AI processing
+            if not ai_response:
+                ai_response = await self._process_with_direct_ai(
+                    request.message, 
+                    context_text, 
+                    memory.chat_memory.messages
+                )
             
-            # Generate AI response
-            ai_response = await ai_service.generate_text(
-                prompt=formatted_prompt,
-                model_type=ModelType.GEMINI_FLASH,
-                max_tokens=800,
-                temperature=0.8
-            )
+            # Ensure ai_response is a string
+            if isinstance(ai_response, dict):
+                if "error" in ai_response:
+                    ai_response = f"I apologize, but I encountered an issue: {ai_response['error']}"
+                else:
+                    ai_response = str(ai_response)
+            elif not isinstance(ai_response, str):
+                ai_response = str(ai_response)
             
             # Create assistant message
             assistant_message = ChatMessage(
@@ -394,7 +510,9 @@ CRITICAL: The user background information provided contains their actual resume 
                 content=ai_response,
                 metadata={
                     "context_chunks_used": len(context_chunks),
-                    "model_used": ModelType.GEMINI_FLASH.value
+                    "model_used": ModelType.GEMINI_FLASH.value,
+                    "workflow_used": workflow_used,
+                    "workflow_name": workflow_routing.get("workflow_name") if workflow_routing else None
                 }
             )
             
@@ -420,6 +538,140 @@ CRITICAL: The user background information provided contains their actual resume 
         except Exception as e:
             logger.error(f"Failed to send message: {e}")
             raise
+    
+    async def _process_with_multi_agent_system(
+        self, 
+        message: str, 
+        user_id: str, 
+        workflow_routing: Dict[str, Any], 
+        user_context: Dict[str, Any]
+    ) -> str:
+        """Process message using Multi-Agent System"""
+        multi_agent_service = await self._get_multi_agent_service()
+        if not multi_agent_service:
+            raise Exception("Multi-Agent Service not available")
+        
+        # Prepare request content for multi-agent processing
+        request_content = {
+            "user_message": message,
+            "user_background": user_context.get("context_text", ""),
+            "context_chunks": user_context.get("context_chunks", []),
+            "chat_context": True,
+            "question": message
+        }
+        
+        # Process through multi-agent system
+        result = await multi_agent_service.process_request(
+            user_id=user_id,
+            request_type=workflow_routing["request_type"],
+            content=request_content,
+            context=user_context
+        )
+        
+        if result["success"]:
+            # Extract response from multi-agent result
+            final_response = result.get("final_response", {})
+            
+            if isinstance(final_response, dict):
+                # If it's a comprehensive response, extract the synthesis
+                if "synthesized_response" in final_response:
+                    return final_response["synthesized_response"]
+                elif "response" in final_response:
+                    return final_response["response"]
+                elif "individual_responses" in final_response and final_response["individual_responses"]:
+                    # Use the best individual response
+                    return str(final_response["individual_responses"][0])
+                else:
+                    # Format the response nicely
+                    return self._format_multi_agent_response(final_response)
+            else:
+                return str(final_response)
+        else:
+            raise Exception(f"Multi-agent processing failed: {result.get('error', 'Unknown error')}")
+    
+    async def _process_with_direct_ai(
+        self, 
+        message: str, 
+        context_text: str, 
+        chat_history: List[BaseMessage]
+    ) -> str:
+        """Process message using direct AI service"""
+        # Create prompt template
+        prompt_template = self._create_chat_prompt_template()
+        
+        # Get AI service
+        ai_service = await self._get_ai_service()
+        
+        # Format the complete prompt
+        formatted_prompt = prompt_template.format(
+            context=context_text,
+            chat_history=chat_history,
+            question=message
+        )
+        
+        # Generate AI response
+        return await ai_service.generate_text(
+            prompt=formatted_prompt,
+            model_type=ModelType.GEMINI_FLASH,
+            max_tokens=800,
+            temperature=0.8
+        )
+    
+    def _format_multi_agent_response(self, response_data: Dict[str, Any]) -> str:
+        """Format multi-agent response data into a readable string"""
+        if not response_data:
+            return "I apologize, but I wasn't able to generate a comprehensive response. Please try rephrasing your question."
+        
+        formatted_parts = []
+        
+        # Check for error responses
+        if "error" in response_data:
+            return f"I encountered an issue while processing your request: {response_data['error']}"
+        
+        # Format different types of responses
+        if isinstance(response_data, str):
+            return response_data
+        
+        # If it's a dict, try to extract meaningful content
+        if isinstance(response_data, dict):
+            # Look for common response fields
+            for field in ["content", "advice", "recommendation", "analysis", "response"]:
+                if field in response_data and response_data[field]:
+                    return str(response_data[field])
+            
+            # If no standard fields, format as a structured response
+            return json.dumps(response_data, indent=2)
+        
+        # Add skills analysis
+        if "skills_analysis" in response_data:
+            skills = response_data["skills_analysis"]
+            if isinstance(skills, dict):
+                if skills.get("skill_gaps"):
+                    formatted_parts.append("**Key Skill Areas to Develop:**")
+                    for gap in skills["skill_gaps"][:3]:  # Limit to top 3
+                        formatted_parts.append(f"• {gap}")
+                    formatted_parts.append("")
+        
+        # Add learning resources
+        if "learning_resources" in response_data:
+            resources = response_data["learning_resources"]
+            if isinstance(resources, dict) and resources.get("recommended_resources"):
+                formatted_parts.append("**Recommended Learning Resources:**")
+                for resource in resources["recommended_resources"][:3]:  # Limit to top 3
+                    if isinstance(resource, dict):
+                        title = resource.get("title", "Resource")
+                        description = resource.get("description", "")
+                        formatted_parts.append(f"• **{title}**: {description}")
+                    else:
+                        formatted_parts.append(f"• {resource}")
+                formatted_parts.append("")
+        
+        # Add workflow metadata if available
+        if "workflow_metadata" in response_data:
+            metadata = response_data["workflow_metadata"]
+            formatted_parts.append(f"*This response was generated using our multi-agent analysis system.*")
+        
+        return "\n".join(formatted_parts) if formatted_parts else "I've analyzed your request using multiple specialized agents. Please let me know if you'd like me to elaborate on any specific aspect."
     
     def get_chat_session(self, session_id: str) -> Optional[ChatSession]:
         """Get a chat session by ID"""

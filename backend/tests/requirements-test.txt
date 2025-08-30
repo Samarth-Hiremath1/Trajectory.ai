@@ -1,0 +1,27 @@
+# Testing dependencies for Supabase Storage Integration
+
+# Core testing framework
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+pytest-mock>=3.10.0
+pytest-timeout>=2.1.0
+
+# Coverage reporting
+pytest-cov>=4.0.0
+
+# Test utilities
+faker>=18.0.0
+factory-boy>=3.2.0
+
+# HTTP testing
+httpx>=0.24.0
+responses>=0.23.0
+
+# Async testing utilities
+pytest-asyncio-cooperative>=0.1.0
+
+# Environment and configuration
+python-dotenv>=1.0.0
+
+# For mocking Supabase responses
+requests-mock>=1.10.0

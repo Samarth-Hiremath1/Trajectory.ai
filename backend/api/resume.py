@@ -96,15 +96,30 @@ async def upload_resume(
         saved_resume_id = await db_service.save_resume(resume_data)
         resume.id = saved_resume_id
         
-        return ResumeResponse(
-            id=resume.id,
-            filename=resume.filename,
-            processing_status=resume.processing_status,
-            upload_date=resume.upload_date,
-            processed_date=resume.processed_date,
-            error_message=resume.error_message,
-            chunk_count=result["chunk_count"]
-        )
+        # Build response data
+        response_data = {
+            "success": True,
+            "message": "Resume uploaded and processed successfully",
+            "resume_id": resume.id,
+            "filename": resume.filename,
+            "processing_status": resume.processing_status.value,
+            "upload_date": resume.upload_date.isoformat(),
+            "processed_date": resume.processed_date.isoformat() if resume.processed_date else None,
+            "chunk_count": result["chunk_count"],
+            "embeddings_stored": result.get("embeddings_stored", False)
+        }
+        
+        # Add user notification if present
+        if "user_notification" in result:
+            response_data["notification"] = result["user_notification"]
+        
+        # Add cleanup info if present
+        if "cleanup_info" in result:
+            response_data["cleanup_info"] = result["cleanup_info"]
+            if result["cleanup_info"].get("file_deleted"):
+                response_data["message"] += " (File deleted due to storage limits)"
+        
+        return JSONResponse(content=response_data)
         
     except HTTPException:
         raise

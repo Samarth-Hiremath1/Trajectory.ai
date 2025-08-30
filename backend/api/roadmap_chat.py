@@ -236,6 +236,17 @@ async def roadmap_chat_health_check(
             "has_cached_context": roadmap_id in roadmap_chat_service.roadmap_contexts
         }
         
+        # Add workflow integration status
+        health["workflow_integration"] = {
+            "available": hasattr(roadmap_chat_service, 'workflow_orchestrator') and roadmap_chat_service.workflow_orchestrator is not None,
+            "orchestrator_initialized": roadmap_chat_service.workflow_orchestrator is not None if hasattr(roadmap_chat_service, 'workflow_orchestrator') else False,
+            "workflow_patterns": len(roadmap_chat_service.roadmap_workflow_patterns) if hasattr(roadmap_chat_service, 'roadmap_workflow_patterns') else 0
+        }
+        
+        if hasattr(roadmap_chat_service, 'workflow_orchestrator') and roadmap_chat_service.workflow_orchestrator:
+            workflow_health = await roadmap_chat_service.workflow_orchestrator.health_check()
+            health["workflow_orchestrator"] = workflow_health
+        
         return health
         
     except Exception as e:
@@ -244,4 +255,31 @@ async def roadmap_chat_health_check(
             "status": "unhealthy",
             "error": str(e),
             "roadmap_id": roadmap_id
+        }
+
+@router.get("/{roadmap_id}/chat/workflow-patterns")
+async def get_roadmap_chat_workflow_patterns(
+    roadmap_id: str,
+    roadmap_chat_service: RoadmapChatService = Depends(get_roadmap_chat_service_dependency)
+):
+    """Get workflow patterns available for roadmap chat"""
+    try:
+        patterns = {}
+        
+        if hasattr(roadmap_chat_service, 'roadmap_workflow_patterns'):
+            patterns = roadmap_chat_service.roadmap_workflow_patterns
+        
+        return {
+            "roadmap_id": roadmap_id,
+            "workflow_patterns": patterns,
+            "pattern_count": len(patterns),
+            "workflow_available": hasattr(roadmap_chat_service, 'workflow_orchestrator') and roadmap_chat_service.workflow_orchestrator is not None
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get roadmap chat workflow patterns: {e}")
+        return {
+            "roadmap_id": roadmap_id,
+            "workflow_patterns": {},
+            "error": str(e)
         }

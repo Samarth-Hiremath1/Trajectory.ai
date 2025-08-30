@@ -30,6 +30,17 @@ graph TB
         RoadmapService[Roadmap Generation Service]
         RoadmapChatService[Roadmap-Specific Chat Service]
         TaskService[Task Management Service]
+        AgentOrchestrator[Multi-Agent Orchestrator Service]
+    end
+    
+    subgraph "AI Agent System"
+        OrchestratorAgent[Orchestrator Agent]
+        CareerStrategyAgent[Career Strategy Agent]
+        SkillsAnalysisAgent[Skills Analysis Agent]
+        LearningResourceAgent[Learning Resource Agent]
+        ResumeOptimizationAgent[Resume Optimization Agent]
+        CareerMentorAgent[Career Mentor Agent]
+        AgentCommunication[Inter-Agent Communication Bus]
     end
     
     subgraph "Data Layer"
@@ -50,18 +61,40 @@ graph TB
     Gateway --> RoadmapService
     Gateway --> RoadmapChatService
     Gateway --> TaskService
+    Gateway --> AgentOrchestrator
     
     UserService --> Supabase
     ResumeService --> ChromaDB
     ResumeService --> HF
-    ChatService --> ChromaDB
-    ChatService --> HF
-    RoadmapService --> HF
-    RoadmapService --> Roadmap
-    RoadmapService --> ChromaDB
-    RoadmapChatService --> ChromaDB
-    RoadmapChatService --> HF
+    ChatService --> AgentOrchestrator
+    RoadmapService --> AgentOrchestrator
+    RoadmapChatService --> AgentOrchestrator
     TaskService --> Supabase
+    
+    AgentOrchestrator --> OrchestratorAgent
+    OrchestratorAgent --> CareerStrategyAgent
+    OrchestratorAgent --> SkillsAnalysisAgent
+    OrchestratorAgent --> LearningResourceAgent
+    OrchestratorAgent --> ResumeOptimizationAgent
+    OrchestratorAgent --> CareerMentorAgent
+    
+    CareerStrategyAgent --> AgentCommunication
+    SkillsAnalysisAgent --> AgentCommunication
+    LearningResourceAgent --> AgentCommunication
+    ResumeOptimizationAgent --> AgentCommunication
+    CareerMentorAgent --> AgentCommunication
+    
+    CareerStrategyAgent --> HF
+    SkillsAnalysisAgent --> HF
+    LearningResourceAgent --> HF
+    ResumeOptimizationAgent --> HF
+    CareerMentorAgent --> HF
+    
+    LearningResourceAgent --> Roadmap
+    CareerStrategyAgent --> ChromaDB
+    SkillsAnalysisAgent --> ChromaDB
+    ResumeOptimizationAgent --> ChromaDB
+    CareerMentorAgent --> ChromaDB
 ```
 
 ### Technology Stack
@@ -174,6 +207,88 @@ class TaskService:
     def delete_task(task_id: str) -> bool
 ```
 
+#### 7. Multi-Agent Orchestrator Service
+```python
+class AgentOrchestratorService:
+    def coordinate_agents(request_type: str, user_context: dict) -> AgentResponse
+    def route_request(request: dict) -> list[str]  # Returns list of agent IDs
+    def synthesize_responses(agent_responses: list[dict]) -> dict
+    def manage_agent_communication(sender_id: str, message: dict) -> bool
+    def get_agent_status() -> dict
+```
+
+### AI Agent System
+
+#### 1. Orchestrator Agent
+```python
+class OrchestratorAgent:
+    def analyze_request(user_request: str, context: dict) -> RequestAnalysis
+    def determine_required_agents(analysis: RequestAnalysis) -> list[str]
+    def coordinate_workflow(agents: list[str], context: dict) -> WorkflowPlan
+    def synthesize_final_response(agent_outputs: list[dict]) -> dict
+    def handle_conflicts(conflicting_responses: list[dict]) -> dict
+```
+
+#### 2. Career Strategy Agent
+```python
+class CareerStrategyAgent:
+    def analyze_career_transition(current_role: str, target_role: str, user_profile: dict) -> dict
+    def create_strategic_roadmap(transition_analysis: dict) -> dict
+    def identify_career_opportunities(user_background: dict) -> list[dict]
+    def assess_market_trends(target_role: str) -> dict
+    def recommend_networking_strategies(career_goals: dict) -> list[dict]
+```
+
+#### 3. Skills Analysis Agent
+```python
+class SkillsAnalysisAgent:
+    def analyze_current_skills(resume_content: str, profile: dict) -> dict
+    def identify_skill_gaps(current_skills: dict, target_role: str) -> dict
+    def prioritize_skill_development(skill_gaps: dict, timeline: str) -> list[dict]
+    def assess_transferable_skills(current_role: str, target_role: str) -> dict
+    def recommend_skill_validation(skills: list[str]) -> list[dict]
+```
+
+#### 4. Learning Resource Agent
+```python
+class LearningResourceAgent:
+    def curate_learning_path(skills: list[str], learning_style: str) -> dict
+    def find_courses(skill: str, difficulty: str, budget: str) -> list[dict]
+    def recommend_certifications(target_role: str, current_skills: dict) -> list[dict]
+    def suggest_projects(skills: list[str], experience_level: str) -> list[dict]
+    def identify_mentorship_opportunities(career_goals: dict) -> list[dict]
+```
+
+#### 5. Resume Optimization Agent
+```python
+class ResumeOptimizationAgent:
+    def analyze_resume_structure(resume_content: str) -> dict
+    def suggest_content_improvements(resume: dict, target_role: str) -> list[dict]
+    def optimize_keywords(resume: dict, job_descriptions: list[str]) -> dict
+    def recommend_formatting_changes(resume_structure: dict) -> list[dict]
+    def validate_achievements(achievements: list[str]) -> dict
+```
+
+#### 6. Career Mentor Agent
+```python
+class CareerMentorAgent:
+    def provide_career_advice(question: str, user_context: dict) -> str
+    def conduct_mock_interview(role: str, user_background: dict) -> dict
+    def offer_motivation_support(user_progress: dict, challenges: list[str]) -> str
+    def suggest_career_experiments(interests: list[str], constraints: dict) -> list[dict]
+    def facilitate_decision_making(options: list[dict], criteria: dict) -> dict
+```
+
+#### 7. Inter-Agent Communication System
+```python
+class AgentCommunicationBus:
+    def send_message(sender_id: str, recipient_id: str, message: dict) -> bool
+    def broadcast_context_update(context: dict) -> bool
+    def request_collaboration(requesting_agent: str, target_agents: list[str], task: dict) -> dict
+    def share_insights(agent_id: str, insights: dict) -> bool
+    def coordinate_response_timing(agents: list[str]) -> dict
+```
+
 ## Data Models
 
 ### User Profile Model
@@ -254,11 +369,67 @@ class Task:
     updated_at: datetime
 ```
 
+### Multi-Agent System Models
+
+#### Agent Request Model
+```python
+class AgentRequest:
+    id: str
+    user_id: str
+    request_type: str  # 'roadmap_generation', 'skill_analysis', 'resume_review', etc.
+    content: dict
+    context: dict
+    priority: int
+    created_at: datetime
+    status: str  # 'pending', 'processing', 'completed', 'failed'
+```
+
+#### Agent Response Model
+```python
+class AgentResponse:
+    id: str
+    request_id: str
+    agent_id: str
+    response_content: dict
+    confidence_score: float
+    processing_time: float
+    metadata: dict
+    created_at: datetime
+```
+
+#### Agent Workflow Model
+```python
+class AgentWorkflow:
+    id: str
+    request_id: str
+    orchestrator_id: str
+    participating_agents: list[str]
+    workflow_steps: list[dict]
+    current_step: int
+    status: str
+    created_at: datetime
+    completed_at: datetime
+```
+
+#### Agent Communication Model
+```python
+class AgentMessage:
+    id: str
+    sender_agent_id: str
+    recipient_agent_id: str
+    message_type: str  # 'context_share', 'collaboration_request', 'insight_share'
+    content: dict
+    timestamp: datetime
+    acknowledged: bool
+```
+
 ### ChromaDB Collections
 - **resume_embeddings**: User resume content chunks
 - **knowledge_base**: Scraped learning resources and career information
 - **conversation_memory**: Chat context and user interaction history
 - **roadmap_embeddings**: Roadmap content for context-aware roadmap chat
+- **agent_knowledge**: Specialized knowledge bases for each agent type
+- **agent_interactions**: Historical agent collaboration patterns and outcomes
 
 ## Error Handling
 
