@@ -323,9 +323,9 @@ class MultiAgentChatService:
             "service_active": True,
             "orchestrator_status": self.orchestrator.get_status(),
             "registered_agents": {
-                "career_mentor": self.career_mentor.get_status().dict(),
-                "skills_analyst": self.skills_analyst.get_status().dict(),
-                "career_strategist": self.career_strategist.get_status().dict()
+                "career_mentor": self.career_mentor.get_status().model_dump(),
+                "skills_analyst": self.skills_analyst.get_status().model_dump(),
+                "career_strategist": self.career_strategist.get_status().model_dump()
             }
         }
 

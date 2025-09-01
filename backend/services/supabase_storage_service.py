@@ -4,7 +4,8 @@ Supabase Storage Service for handling file uploads
 import os
 import uuid
 import logging
-from typing import Optional, Tuple
+from datetime import datetime, timedelta
+from typing import Optional, Tuple, Dict
 from pathlib import Path
 from supabase import create_client, Client
 
@@ -15,12 +16,21 @@ class SupabaseStorageService:
     
     def __init__(self):
         self.supabase_url = os.getenv("SUPABASE_URL")
-        self.supabase_key = os.getenv("SUPABASE_ANON_KEY")
+        self.supabase_anon_key = os.getenv("SUPABASE_ANON_KEY")
+        self.supabase_service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
         
-        if not self.supabase_url or not self.supabase_key:
+        if not self.supabase_url or not self.supabase_anon_key:
             raise ValueError("Supabase credentials not found in environment variables")
         
-        self.supabase: Client = create_client(self.supabase_url, self.supabase_key)
+        # Use anon key for regular operations
+        self.supabase: Client = create_client(self.supabase_url, self.supabase_anon_key)
+        
+        # Use service key for admin operations if available
+        if self.supabase_service_key:
+            self.supabase_admin: Client = create_client(self.supabase_url, self.supabase_service_key)
+        else:
+            self.supabase_admin = self.supabase
+        
         self.bucket_name = "resumes"
         
         # File tracking for quota management
@@ -32,13 +42,15 @@ class SupabaseStorageService:
     def _ensure_bucket_exists(self):
         """Ensure the resumes bucket exists"""
         try:
-            # Try to get bucket info
-            bucket_info = self.supabase.storage.get_bucket(self.bucket_name)
-            if bucket_info:
+            # Try to get bucket info using admin client
+            buckets = self.supabase_admin.storage.list_buckets()
+            bucket_exists = any(b.name == self.bucket_name for b in buckets)
+            
+            if bucket_exists:
                 logger.info(f"Bucket '{self.bucket_name}' exists")
             else:
-                # Create bucket if it doesn't exist
-                self.supabase.storage.create_bucket(
+                # Create bucket if it doesn't exist using admin client
+                self.supabase_admin.storage.create_bucket(
                     self.bucket_name,
                     options={"public": False}  # Private bucket for security
                 )
@@ -79,14 +91,13 @@ class SupabaseStorageService:
                 "temporary": temporary
             }
             
-            # Upload to Supabase Storage
-            response = self.supabase.storage.from_(self.bucket_name).upload(
+            # Upload to Supabase Storage using admin client for permissions
+            response = self.supabase_admin.storage.from_(self.bucket_name).upload(
                 path=storage_path,
                 file=file_content,
                 file_options={
                     "content-type": "application/pdf",
-                    "cache-control": "3600" if not temporary else "300",  # Shorter cache for temp files
-                    "upsert": True  # Allow overwriting
+                    "cache-control": "3600" if not temporary else "300"  # Shorter cache for temp files
                 }
             )
             
@@ -116,7 +127,7 @@ class SupabaseStorageService:
             Signed URL for file access
         """
         try:
-            response = self.supabase.storage.from_(self.bucket_name).create_signed_url(
+            response = self.supabase_admin.storage.from_(self.bucket_name).create_signed_url(
                 path=storage_path,
                 expires_in=expires_in
             )
@@ -141,7 +152,7 @@ class SupabaseStorageService:
             True if successful, False otherwise
         """
         try:
-            response = self.supabase.storage.from_(self.bucket_name).remove([storage_path])
+            response = self.supabase_admin.storage.from_(self.bucket_name).remove([storage_path])
             
             if hasattr(response, 'error') and response.error:
                 logger.error(f"Failed to delete file: {response.error}")
@@ -165,7 +176,7 @@ class SupabaseStorageService:
             List of file objects
         """
         try:
-            response = self.supabase.storage.from_(self.bucket_name).list(
+            response = self.supabase_admin.storage.from_(self.bucket_name).list(
                 path=f"users/{user_id}",
                 options={"limit": 100, "offset": 0}
             )
@@ -196,7 +207,7 @@ class SupabaseStorageService:
             directory = '/'.join(path_parts[:-1])
             filename = path_parts[-1]
             
-            response = self.supabase.storage.from_(self.bucket_name).list(
+            response = self.supabase_admin.storage.from_(self.bucket_name).list(
                 path=directory,
                 options={"limit": 100}
             )
@@ -238,9 +249,9 @@ class SupabaseStorageService:
                 "status": "unhealthy",
                 "service": "supabase_storage",
                 "error": str(e)
-            }    
-  
-  async def get_storage_usage(self) -> Dict:
+            }
+    
+    async def get_storage_usage(self) -> Dict:
         """Get storage usage statistics"""
         try:
             # List all files in the bucket

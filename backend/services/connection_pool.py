@@ -53,7 +53,8 @@ class DatabaseConnectionPool:
         """
         self.database_url = database_url or os.getenv("DATABASE_URL")
         if not self.database_url:
-            raise ValueError("DATABASE_URL must be provided")
+            logger.warning("DATABASE_URL not provided - database features will be disabled")
+            self.database_url = None
         
         self.min_size = min_size
         self.max_size = max_size
@@ -71,6 +72,10 @@ class DatabaseConnectionPool:
     
     async def initialize(self) -> bool:
         """Initialize the connection pool"""
+        if not self.database_url:
+            logger.info("Skipping database connection pool initialization - no DATABASE_URL provided")
+            return True
+            
         try:
             async with self._lock:
                 if self.pool is not None:
@@ -115,6 +120,8 @@ class DatabaseConnectionPool:
             async with pool.acquire_connection() as conn:
                 result = await conn.fetch("SELECT * FROM table")
         """
+        if not self.database_url:
+            raise RuntimeError("Database not configured - DATABASE_URL not provided")
         if not self.pool:
             raise RuntimeError("Connection pool not initialized")
         

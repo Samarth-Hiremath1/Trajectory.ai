@@ -80,8 +80,7 @@ const nextConfig: NextConfig = {
   // Output optimization
   output: 'standalone',
   
-  // Enable SWC minification
-  swcMinify: true,
+  // SWC minification is enabled by default in Next.js 13+
   
   // Reduce bundle size
   modularizeImports: {

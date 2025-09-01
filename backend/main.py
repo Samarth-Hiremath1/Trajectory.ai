@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 import uvicorn
 import logging
 from dotenv import load_dotenv
@@ -33,20 +34,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="Trajectory.AI Backend", version="1.0.0")
-
-# Configure CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Next.js dev server
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize services on startup"""
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan event handler for startup and shutdown"""
+    # Startup
     try:
         # Initialize performance monitoring services
         logger.info("Initializing performance services...")
@@ -86,10 +77,10 @@ async def startup_event():
         logger.error(f"Failed to initialize services: {str(e)}")
         import traceback
         logger.error(f"Startup error traceback: {traceback.format_exc()}")
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup services on shutdown"""
+    
+    yield
+    
+    # Shutdown
     try:
         logger.info("Shutting down services...")
         
@@ -117,6 +108,20 @@ async def shutdown_event():
         
     except Exception as e:
         logger.error(f"Failed to cleanup services: {str(e)}")
+
+app = FastAPI(title="Trajectory.AI Backend", version="1.0.0", lifespan=lifespan)
+
+# Configure CORS
+cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["*"],
+)
+
+
 
 # Include routers
 app.include_router(resume_router)

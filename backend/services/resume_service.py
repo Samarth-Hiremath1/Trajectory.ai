@@ -11,7 +11,7 @@ import logging
 from models.resume import Resume, ResumeChunk, ResumeParseResult, ProcessingStatus
 from services.embedding_service import EmbeddingService
 from services.supabase_storage_service import SupabaseStorageService
-from services.storage_quota_manager import StorageQuotaManager
+from services.storage_quota_manager import StorageQuotaManager, StorageMode
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ class ResumeProcessingService:
             if self.quota_manager:
                 quota_status = await self.quota_manager.check_storage_status()
                 storage_info["quota_status"] = quota_status
-                temporary = quota_status["mode"].value == "temporary"
+                temporary = quota_status["mode"] == StorageMode.TEMPORARY
                 storage_info["temporary"] = temporary
             
             # Use Supabase Storage
@@ -341,7 +341,7 @@ class ResumeProcessingService:
             logger.error(f"Resume search failed for user {user_id}: {e}")
             return []
     
-    def delete_user_resume_data(self, user_id: str, file_path: Optional[str] = None) -> bool:
+    async def delete_user_resume_data(self, user_id: str, file_path: Optional[str] = None) -> bool:
         """Delete all resume data for a user including embeddings"""
         try:
             # Delete embeddings from ChromaDB

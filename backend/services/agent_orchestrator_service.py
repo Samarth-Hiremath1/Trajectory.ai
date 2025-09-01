@@ -238,7 +238,7 @@ class AgentOrchestratorService:
             request_id=request.id,
             orchestrator_id="orchestrator",
             participating_agents=participating_agents,
-            workflow_steps=[step.dict() for step in steps],
+            workflow_steps=[step.model_dump() for step in steps],
             status=WorkflowStatus.CREATED,
             metadata={
                 "request_type": request.request_type.value,
@@ -292,7 +292,7 @@ class AgentOrchestratorService:
                     agent_type=agent_type,
                     step_name=f"Process with {agent_type.value}",
                     input_data={
-                        "request": request.dict(),
+                        "request": request.model_dump(),
                         "context": request.context,
                         "step_index": i
                     }
@@ -366,14 +366,14 @@ class AgentOrchestratorService:
                 )
                 
                 # Update step
-                step.output_data = response.dict()
+                step.output_data = response.model_dump()
                 step.status = RequestStatus.COMPLETED if response.confidence_score > 0 else RequestStatus.FAILED
                 step.completed_at = datetime.utcnow()
                 
                 # Update the step in workflow
                 for i, ws in enumerate(workflow.workflow_steps):
                     if ws["step_id"] == step.step_id:
-                        workflow.workflow_steps[i] = step.dict()
+                        workflow.workflow_steps[i] = step.model_dump()
                         break
                 
                 logger.info(f"Completed workflow step with agent {step.agent_id}")
@@ -417,7 +417,7 @@ class AgentOrchestratorService:
             return {
                 "success": True,
                 "workflow_id": workflow.id,
-                "responses": [r.dict() for r in responses],
+                "responses": [r.model_dump() for r in responses],
                 "final_response": final_response,
                 "execution_time": execution_time,
                 "steps_completed": len([s for s in workflow.workflow_steps if s.get("status") == RequestStatus.COMPLETED.value])

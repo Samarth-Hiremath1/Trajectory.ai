@@ -77,7 +77,7 @@ async def get_agent_status():
                         "maxLoad": agent_status.max_concurrent_requests,
                         "isActive": agent_status.is_active,
                         "lastHeartbeat": agent_status.last_heartbeat.isoformat(),
-                        "capabilities": [cap.dict() for cap in agent_status.capabilities]
+                        "capabilities": [cap.model_dump() for cap in agent_status.capabilities]
                     })
                 except Exception as agent_error:
                     logger.error(f"Error processing agent {agent_id}: {str(agent_error)}")

@@ -127,9 +127,7 @@ async def update_profile(
         # TODO: Add proper authorization check to ensure user can only update their own profile
         
         # Convert education data to dict for database storage
-        update_data = profile_data.dict(exclude_unset=True)
-        if 'education' in update_data and update_data['education']:
-            update_data['education'] = update_data['education'].dict(exclude_unset=True)
+        update_data = profile_data.model_dump(exclude_unset=True)
         
         # Update profile in database
         updated_profile = await get_db_service().update_profile(user_id, update_data)

@@ -273,7 +273,7 @@ startxref
                         await resume_service.delete_resume_file(result["file_path"])
                 
                 # Clean up embeddings
-                resume_service.delete_user_resume_data(test_user_id)
+                await resume_service.delete_user_resume_data(test_user_id)
                 print(f"✅ Test data cleaned up for user: {test_user_id}")
             except Exception as cleanup_error:
                 print(f"⚠️ Cleanup warning: {cleanup_error}")

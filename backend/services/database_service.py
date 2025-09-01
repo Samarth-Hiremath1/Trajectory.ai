@@ -53,11 +53,19 @@ class DatabaseService:
     
     def _convert_user_id_to_uuid(self, user_id: str) -> str:
         """Convert string user_id to UUID format if needed"""
-        if isinstance(user_id, str) and not user_id.count('-') == 4:
-            # Convert string to UUID format by hashing
-            hash_object = hashlib.md5(user_id.encode())
-            return str(uuid.UUID(hash_object.hexdigest()))
-        return user_id
+        # Convert to string first in case it's not a string
+        user_id_str = str(user_id) if user_id is not None else ""
+        
+        if isinstance(user_id_str, str) and user_id_str:
+            # Check if it's already a valid UUID
+            try:
+                uuid.UUID(user_id_str)
+                return user_id_str
+            except ValueError:
+                # Convert string to UUID format by hashing
+                hash_object = hashlib.md5(user_id_str.encode())
+                return str(uuid.UUID(hash_object.hexdigest()))
+        return user_id_str
     
     def _track_query_performance(self, operation: str, query_time: float, success: bool = True):
         """Track query performance metrics"""
@@ -88,7 +96,7 @@ class DatabaseService:
                 "current_role": roadmap.current_role,
                 "target_role": roadmap.target_role,
                 "status": roadmap.status.value,
-                "phases": [phase.dict() for phase in roadmap.phases],
+                "phases": [phase.model_dump() for phase in roadmap.phases],
                 "total_estimated_weeks": roadmap.total_estimated_weeks,
                 "overall_progress_percentage": float(roadmap.overall_progress_percentage),
                 "current_phase": roadmap.current_phase,
@@ -208,7 +216,7 @@ class DatabaseService:
             session_data = {
                 "user_id": user_id,
                 "title": chat_session.title,
-                "messages": [msg.dict() for msg in chat_session.messages],
+                "messages": [msg.model_dump() for msg in chat_session.messages],
                 "context_version": chat_session.context_version,
                 "created_at": chat_session.created_at.isoformat(),
                 "updated_at": datetime.utcnow().isoformat(),
@@ -684,7 +692,7 @@ class DatabaseService:
                 "request_id": workflow.request_id,
                 "orchestrator_id": workflow.orchestrator_id,
                 "participating_agents": workflow.participating_agents,
-                "workflow_steps": [step.dict() for step in workflow.workflow_steps],
+                "workflow_steps": [step.model_dump() for step in workflow.workflow_steps],
                 "current_step": workflow.current_step,
                 "status": workflow.status.value,
                 "metadata": workflow.metadata,
@@ -760,7 +768,7 @@ class DatabaseService:
                 "is_active": status.is_active,
                 "current_load": status.current_load,
                 "max_concurrent_requests": status.max_concurrent_requests,
-                "capabilities": [cap.dict() for cap in status.capabilities],
+                "capabilities": [cap.model_dump() for cap in status.capabilities],
                 "performance_metrics": status.performance_metrics,
                 "last_heartbeat": status.last_heartbeat.isoformat()
             }

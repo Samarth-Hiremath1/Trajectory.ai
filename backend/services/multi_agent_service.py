@@ -583,7 +583,7 @@ class MultiAgentService:
             "agents": {
                 agent_id: {
                     "type": agent.agent_type.value,
-                    "status": agent.get_status().dict() if hasattr(agent, 'get_status') else "unknown"
+                    "status": agent.get_status().model_dump() if hasattr(agent, 'get_status') else "unknown"
                 }
                 for agent_id, agent in self.agents.items()
             }
@@ -607,8 +607,8 @@ class MultiAgentService:
             agent_info = {
                 "id": agent_id,
                 "type": agent.agent_type.value,
-                "capabilities": [cap.dict() for cap in agent.capabilities] if hasattr(agent, 'capabilities') else [],
-                "status": agent.get_status().dict() if hasattr(agent, 'get_status') else {}
+                "capabilities": [cap.model_dump() for cap in agent.capabilities] if hasattr(agent, 'capabilities') else [],
+                "status": agent.get_status().model_dump() if hasattr(agent, 'get_status') else {}
             }
             agents_info.append(agent_info)
         

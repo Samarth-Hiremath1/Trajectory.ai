@@ -86,17 +86,13 @@ class StorageQuotaManager:
             # 2. Use Supabase dashboard API (if available)
             # 3. Estimate based on file counts and sizes
             
-            # For now, we'll estimate based on file listing
-            files = await self.storage_service.list_user_files("all")  # This would need modification
-            
-            total_size = 0
-            for file_info in files:
-                total_size += file_info.get("metadata", {}).get("size", 0)
+            # For now, we'll use the storage service's get_storage_usage method
+            usage_stats = await self.storage_service.get_storage_usage()
             
             return {
-                "storage_used": total_size,
+                "storage_used": usage_stats.get("total_size_bytes", 0),
                 "bandwidth_used": 0,  # Would need to track this separately
-                "file_count": len(files)
+                "file_count": usage_stats.get("file_count", 0)
             }
             
         except Exception as e:
