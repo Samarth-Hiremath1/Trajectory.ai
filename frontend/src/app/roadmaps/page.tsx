@@ -51,10 +51,10 @@ export default function RoadmapsPage() {
                   Dashboard
                 </button>
                 <button
-                  onClick={() => router.push('/daily-dashboard')}
-                  className="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium"
+                  onClick={() => router.push('/roadmaps')}
+                  className="bg-indigo-100 text-indigo-700 px-3 py-2 rounded-md text-sm font-medium relative"
                 >
-                  Daily Dashboard
+                  Roadmaps
                 </button>
                 <button
                   onClick={() => router.push('/ai-mentor')}
@@ -63,16 +63,16 @@ export default function RoadmapsPage() {
                   AI Mentor
                 </button>
                 <button
-                  onClick={() => router.push('/roadmaps')}
-                  className="bg-indigo-100 text-indigo-700 px-3 py-2 rounded-md text-sm font-medium"
+                  onClick={() => router.push('/daily-dashboard')}
+                  className="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium"
                 >
-                  Roadmaps
+                  Daily Dashboard
                 </button>
               </div>
             </div>
             <div className="flex items-center space-x-4">
               <span className="text-sm text-gray-700">
-                Welcome, {profile?.name || user.email}
+                Welcome, {profile?.name || user?.email?.split('@')[0] || 'User'}
               </span>
               <button
                 onClick={signOut}

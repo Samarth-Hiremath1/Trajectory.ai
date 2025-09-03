@@ -170,6 +170,11 @@ export function RoadmapHistoryInterface() {
     
     // Refresh roadmap history to include the new roadmap
     await loadRoadmapHistory()
+    
+    // Dispatch event to notify dashboard of new roadmap
+    window.dispatchEvent(new CustomEvent('roadmapCreated', { 
+      detail: { roadmap: convertedRoadmap } 
+    }))
   }
 
   const handlePhaseUpdate = async (phaseNumber: number, updates: Record<string, unknown>) => {
@@ -352,7 +357,12 @@ export function RoadmapHistoryInterface() {
                   </p>
                   
                   <div className="flex justify-between items-center text-xs text-gray-500">
-                    <span>{roadmap.overall_progress_percentage}% complete</span>
+                    <span>
+                      {roadmap.overall_progress_percentage > 0 
+                        ? `${roadmap.overall_progress_percentage}% complete`
+                        : 'Just started'
+                      }
+                    </span>
                     <span>{formatDate(roadmap.created_date)}</span>
                   </div>
                   
@@ -409,7 +419,12 @@ export function RoadmapHistoryInterface() {
                       <span>•</span>
                       <span>{selectedRoadmap.total_estimated_weeks} weeks</span>
                       <span>•</span>
-                      <span>{selectedRoadmap.overall_progress_percentage}% complete</span>
+                      <span>
+                        {selectedRoadmap.overall_progress_percentage > 0 
+                          ? `${selectedRoadmap.overall_progress_percentage}% complete`
+                          : 'Just started'
+                        }
+                      </span>
                     </div>
                   </div>
                   

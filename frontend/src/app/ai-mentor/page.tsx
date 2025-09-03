@@ -61,10 +61,10 @@ export default function AIMentorPage() {
                   Dashboard
                 </button>
                 <button
-                  onClick={() => router.push('/daily-dashboard')}
-                  className="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors"
+                  onClick={() => router.push('/roadmaps')}
+                  className="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium relative transition-colors"
                 >
-                  Daily Dashboard
+                  Roadmaps
                 </button>
                 <button
                   onClick={() => router.push('/ai-mentor')}
@@ -73,16 +73,16 @@ export default function AIMentorPage() {
                   AI Mentor
                 </button>
                 <button
-                  onClick={() => router.push('/roadmaps')}
+                  onClick={() => router.push('/daily-dashboard')}
                   className="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors"
                 >
-                  Roadmaps
+                  Daily Dashboard
                 </button>
               </div>
             </div>
             <div className="flex items-center space-x-4">
               <span className="text-sm text-gray-700">
-                Welcome, {profile?.name || user.email}
+                Welcome, {profile?.name || user?.email?.split('@')[0] || 'User'}
               </span>
               <button
                 onClick={signOut}
@@ -103,7 +103,8 @@ export default function AIMentorPage() {
                 AI Career Mentor
               </h2>
               <p className="text-gray-600">
-                Get personalized career advice based on your profile and resume. Your conversation history is automatically saved.
+                Get guidance on your roadmap progress, resume feedback, and personalized career advice. 
+                Your AI mentor understands your background and goals to provide tailored support.
               </p>
             </div>
             

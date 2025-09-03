@@ -29,38 +29,28 @@ export function QuickActions({ profile, onEditProfile, onStartOnboarding }: Quic
             
             <div className="flex flex-wrap gap-2">
               <button
+                onClick={() => {
+                  window.location.href = '/roadmaps'
+                }}
+                className="text-sm bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded font-medium shadow-sm"
+              >
+                Create Roadmap
+              </button>
+              
+              <button
+                onClick={() => {
+                  window.location.href = '/ai-mentor'
+                }}
+                className="text-sm bg-green-100 hover:bg-green-200 text-green-700 px-3 py-2 rounded font-medium"
+              >
+                Ask AI Mentor
+              </button>
+              
+              <button
                 onClick={onEditProfile}
                 className="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded font-medium"
               >
                 Edit Profile
-              </button>
-              
-              <button
-                onClick={() => {
-                  // Scroll to chat section
-                  const chatTab = document.querySelector('[data-tab="chat"]') as HTMLButtonElement
-                  if (chatTab) {
-                    chatTab.click()
-                    chatTab.scrollIntoView({ behavior: 'smooth' })
-                  }
-                }}
-                className="text-sm bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-3 py-2 rounded font-medium"
-              >
-                Start Chat
-              </button>
-              
-              <button
-                onClick={() => {
-                  // Scroll to roadmap section
-                  const roadmapTab = document.querySelector('[data-tab="roadmap"]') as HTMLButtonElement
-                  if (roadmapTab) {
-                    roadmapTab.click()
-                    roadmapTab.scrollIntoView({ behavior: 'smooth' })
-                  }
-                }}
-                className="text-sm bg-purple-100 hover:bg-purple-200 text-purple-700 px-3 py-2 rounded font-medium"
-              >
-                View Roadmaps
               </button>
             </div>
           </div>

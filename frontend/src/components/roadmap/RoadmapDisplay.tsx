@@ -889,7 +889,9 @@ export function RoadmapDisplay({ roadmap, userId, onPhaseUpdate, onEdit }: Roadm
                         </div>
                         
                         <div className="flex items-center justify-between text-sm text-gray-600 mb-3">
-                          <span>{phaseProgress}% complete</span>
+                          <span>
+                            {phaseProgress > 0 ? `${phaseProgress}% complete` : 'Ready to start'}
+                          </span>
                           <span>{phase.milestones.length} milestones</span>
                         </div>
                         

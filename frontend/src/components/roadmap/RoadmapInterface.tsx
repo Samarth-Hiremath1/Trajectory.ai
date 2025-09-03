@@ -87,6 +87,11 @@ export function RoadmapInterface() {
         strengthsAnalysis: roadmap.strengths_analysis
       }))
     }
+    
+    // Dispatch event to notify dashboard of new roadmap
+    window.dispatchEvent(new CustomEvent('roadmapCreated', { 
+      detail: { roadmap: convertedRoadmap } 
+    }))
   }
 
   const handlePhaseUpdate = async (phaseNumber: number, updates: Record<string, unknown>) => {

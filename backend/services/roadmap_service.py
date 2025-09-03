@@ -494,34 +494,41 @@ User Background:
 Current Role: {request.current_role}
 Target Role: {request.target_role}{timeline_text}{focus_areas_text}{constraints_text}
 
-Provide a concise analysis in the following format:
+Provide a concise analysis in the following format. IMPORTANT: Each section should contain UNIQUE items - do not repeat the same skills, strengths, or challenges across different sections.
 
 ROADMAP RATIONALE:
-[Provide a 1-2 paragraph explanation of WHY this specific roadmap was created based on their background, focus areas, constraints, and timeline preference. Be specific about key technologies or experiences that influenced the roadmap design. Explain how the roadmap addresses their constraints and emphasizes their focus areas.]
+[Provide a 1-2 paragraph explanation of WHY this specific roadmap was created based on their background, focus areas, constraints, and timeline preference. Be specific about key technologies or experiences that influenced the roadmap design. Explain how the roadmap addresses their constraints and emphasizes their focus areas. DO NOT include bullet points here - only narrative text.]
 
 CURRENT STRENGTHS:
-- [Strength 1]: [Brief explanation, considering how it relates to focus areas]
-- [Strength 2]: [Brief explanation, considering how it relates to focus areas]
-- [Strength 3]: [Brief explanation, considering how it relates to focus areas]
+- [Strength 1]: [Brief explanation of existing skills/experience that will help in the transition]
+- [Strength 2]: [Brief explanation of existing skills/experience that will help in the transition]
+- [Strength 3]: [Brief explanation of existing skills/experience that will help in the transition]
 
 AREAS FOR IMPROVEMENT:
-- [Gap 1]: [Why important for target role, considering focus areas]
-- [Gap 2]: [Why important for target role, considering focus areas]
-- [Gap 3]: [Why important for target role, considering focus areas]
+- [Gap 1]: [Specific skill or knowledge area that needs development for the target role]
+- [Gap 2]: [Specific skill or knowledge area that needs development for the target role]
+- [Gap 3]: [Specific skill or knowledge area that needs development for the target role]
 
 KEY TRANSFERABLE SKILLS:
-- [Skill 1]: [How it applies to target role and focus areas]
-- [Skill 2]: [How it applies to target role and focus areas]
+- [Skill 1]: [Existing skill from current role that applies to target role in a different context]
+- [Skill 2]: [Existing skill from current role that applies to target role in a different context]
 
 BIGGEST CHALLENGES:
-- [Challenge 1]: [Brief mitigation approach considering user constraints]
-- [Challenge 2]: [Brief mitigation approach considering user constraints]
+- [Challenge 1]: [Major obstacle or difficulty in the transition with brief mitigation approach]
+- [Challenge 2]: [Major obstacle or difficulty in the transition with brief mitigation approach]
 
 COMPETITIVE ADVANTAGES:
-- [Advantage 1]: [Why this helps you stand out in the target role]
-- [Advantage 2]: [Why this helps you stand out in the target role]
+- [Advantage 1]: [Unique combination of skills or experience that sets you apart]
+- [Advantage 2]: [Unique combination of skills or experience that sets you apart]
 
-Keep explanations concise and actionable. Always reference the user's constraints and focus areas where relevant."""
+CRITICAL REQUIREMENTS:
+- Each section must contain DIFFERENT items - no duplicates across sections
+- Current Strengths = what you already have and can leverage
+- Areas for Improvement = what you need to learn/develop
+- Transferable Skills = existing skills that apply differently in the new role
+- Challenges = obstacles you'll face during transition
+- Competitive Advantages = what makes you unique for this transition
+- Keep explanations concise and actionable"""
 
             response = await self.ai_service.generate_text(
                 prompt=analysis_prompt,
@@ -558,44 +565,103 @@ Keep explanations concise and actionable. Always reference the user's constraint
             "advantages": []
         }
         
-        # Extract roadmap rationale first
-        rationale_match = re.search(r'ROADMAP RATIONALE:\s*(.+?)(?=\nCURRENT STRENGTHS:|$)', response, re.IGNORECASE | re.DOTALL)
+        # Extract roadmap rationale first - only the first paragraph, not the bullet points
+        rationale_match = re.search(r'ROADMAP RATIONALE:\s*(.+?)(?=\n\n|\nCURRENT STRENGTHS:|$)', response, re.IGNORECASE | re.DOTALL)
         if rationale_match:
-            analysis["roadmap_rationale"] = rationale_match.group(1).strip()
+            rationale_text = rationale_match.group(1).strip()
+            # Remove any bullet points from the rationale - keep only the first paragraph(s)
+            lines = rationale_text.split('\n')
+            rationale_lines = []
+            for line in lines:
+                line = line.strip()
+                if line.startswith('-') or line.startswith('•'):
+                    break  # Stop at first bullet point
+                if line:
+                    rationale_lines.append(line)
+            analysis["roadmap_rationale"] = '\n'.join(rationale_lines).strip()
         
-        # Extract each section
-        sections = {
-            "strengths": r'CURRENT STRENGTHS:\s*(.+?)(?=\nAREAS FOR IMPROVEMENT:|$)',
-            "weaknesses": r'AREAS FOR IMPROVEMENT:\s*(.+?)(?=\nKEY TRANSFERABLE SKILLS:|$)',
-            "transferable_skills": r'KEY TRANSFERABLE SKILLS:\s*(.+?)(?=\nBIGGEST CHALLENGES:|$)',
-            "challenges": r'BIGGEST CHALLENGES:\s*(.+?)(?=\nCOMPETITIVE ADVANTAGES:|$)',
-            "advantages": r'COMPETITIVE ADVANTAGES:\s*(.+?)(?=\n[A-Z]|$)'
-        }
+        # Split the response into sections more reliably
+        sections_text = {}
         
-        for key, pattern in sections.items():
-            match = re.search(pattern, response, re.IGNORECASE | re.DOTALL)
+        # Find all section headers and their positions
+        section_headers = [
+            ('CURRENT STRENGTHS:', 'strengths'),
+            ('AREAS FOR IMPROVEMENT:', 'weaknesses'),
+            ('KEY TRANSFERABLE SKILLS:', 'transferable_skills'),
+            ('BIGGEST CHALLENGES:', 'challenges'),
+            ('COMPETITIVE ADVANTAGES:', 'advantages')
+        ]
+        
+        # Find positions of each section header
+        section_positions = []
+        for header, key in section_headers:
+            match = re.search(rf'{re.escape(header)}\s*', response, re.IGNORECASE)
             if match:
-                section_text = match.group(1).strip()
-                items = []
-                
-                for line in section_text.split('\n'):
-                    line = line.strip()
-                    if line.startswith('-'):
-                        # Parse format: - Item: Description
-                        item_match = re.match(r'-\s*([^:]+):\s*(.+)', line)
-                        if item_match:
-                            items.append({
-                                "title": item_match.group(1).strip(),
-                                "description": item_match.group(2).strip()
-                            })
-                        else:
-                            # Fallback: just the item text
-                            items.append({
-                                "title": line.replace('-', '').strip(),
-                                "description": ""
-                            })
-                
-                analysis[key] = items
+                section_positions.append((match.end(), key, header))
+        
+        # Sort by position
+        section_positions.sort()
+        
+        # Extract content for each section
+        for i, (start_pos, key, header) in enumerate(section_positions):
+            # Find the end position (start of next section or end of text)
+            if i + 1 < len(section_positions):
+                end_pos = section_positions[i + 1][0]
+                # Find the actual start of the next section header
+                next_header = section_positions[i + 1][2]
+                next_match = re.search(rf'{re.escape(next_header)}', response[start_pos:], re.IGNORECASE)
+                if next_match:
+                    end_pos = start_pos + next_match.start()
+            else:
+                end_pos = len(response)
+            
+            section_content = response[start_pos:end_pos].strip()
+            sections_text[key] = section_content
+        
+        # Parse each section's content
+        for key, section_content in sections_text.items():
+            items = []
+            
+            # Split into lines and process each bullet point
+            lines = section_content.split('\n')
+            current_item = None
+            
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                    
+                # Check if this is a new bullet point
+                if line.startswith('-') or line.startswith('•'):
+                    # Save previous item if exists
+                    if current_item:
+                        items.append(current_item)
+                    
+                    # Parse new item: - Title: Description
+                    bullet_content = line[1:].strip()  # Remove bullet
+                    if ':' in bullet_content:
+                        title_part, desc_part = bullet_content.split(':', 1)
+                        current_item = {
+                            "title": title_part.strip(),
+                            "description": desc_part.strip()
+                        }
+                    else:
+                        current_item = {
+                            "title": bullet_content,
+                            "description": ""
+                        }
+                elif current_item and line:
+                    # This is a continuation of the description
+                    if current_item["description"]:
+                        current_item["description"] += " " + line
+                    else:
+                        current_item["description"] = line
+            
+            # Don't forget the last item
+            if current_item:
+                items.append(current_item)
+            
+            analysis[key] = items
         
         return analysis
     
@@ -706,7 +772,15 @@ Keep explanations concise and actionable. Always reference the user's constraint
             generation_time = (datetime.utcnow() - start_time).total_seconds()
             
             # Extract comprehensive analysis from multi-agent response
-            strengths_analysis = self._extract_comprehensive_analysis(final_response)
+            # For now, use empty analysis - multi-agent system should provide its own analysis
+            strengths_analysis = {
+                "roadmap_rationale": "This roadmap was generated using our advanced multi-agent system, which analyzed your background, constraints, and focus areas to create a personalized career transition plan.",
+                "strengths": [],
+                "weaknesses": [],
+                "transferable_skills": [],
+                "challenges": [],
+                "advantages": []
+            }
             
             logger.info(f"Generated roadmap using optimized multi-agent system for {user_id}: {request.current_role} → {request.target_role} in {generation_time:.2f}s")
             

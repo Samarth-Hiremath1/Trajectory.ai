@@ -71,7 +71,7 @@ export function RoadmapGenerationLoader({ progress }: { progress?: number }) {
         message={currentMessage}
         className="min-h-[120px]"
       />
-      {progress && (
+      {progress && progress > 0 && (
         <div className="mt-4">
           <div className="w-full bg-gray-200 rounded-full h-2">
             <div 
@@ -110,7 +110,7 @@ export function ResumeUploadLoader({ progress }: { progress?: number }) {
         message={currentMessage}
         className="min-h-[100px]"
       />
-      {progress && (
+      {progress && progress > 0 && (
         <div className="mt-4">
           <div className="w-full bg-gray-200 rounded-full h-2">
             <div 

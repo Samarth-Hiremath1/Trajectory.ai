@@ -229,7 +229,7 @@ export function NotesComponent({ userId, roadmapId, phaseNumber }: NotesComponen
   }
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
+    <div className="bg-white rounded-lg shadow p-6 h-full flex flex-col">
       <div className="flex items-center justify-between mb-6">
         <h3 className="text-lg font-semibold text-gray-900">Career Notes</h3>
         <button
@@ -268,7 +268,7 @@ export function NotesComponent({ userId, roadmapId, phaseNumber }: NotesComponen
 
       {/* Add/Edit Note Form */}
       {showAddForm && (
-        <div className="border border-gray-200 rounded-lg p-4 mb-6 bg-gray-50">
+        <div className="border border-gray-200 rounded-lg p-4 mb-6 bg-gray-50 flex-shrink-0">
           <h4 className="font-medium text-gray-900 mb-3">
             {editingNote ? 'Edit Note' : 'Add New Note'}
           </h4>
@@ -369,77 +369,79 @@ export function NotesComponent({ userId, roadmapId, phaseNumber }: NotesComponen
       )}
 
       {/* Notes List */}
-      <div className="space-y-4 max-h-96 overflow-y-auto">
-        {filteredNotes.map(note => (
-          <div
-            key={note.id}
-            className={`border rounded-lg p-4 ${note.pinned ? 'border-yellow-300 bg-yellow-50' : 'border-gray-200 bg-white'}`}
-          >
-            <div className="flex items-start justify-between mb-2">
-              <div className="flex items-center space-x-2">
-                <span className="text-lg">{getCategoryIcon(note.category)}</span>
-                <h4 className="font-medium text-gray-900">{note.title}</h4>
-                <span className={`px-2 py-1 text-xs rounded-full ${getCategoryColor(note.category)}`}>
-                  {note.category}
-                </span>
-                {note.pinned && (
-                  <span className="text-yellow-500">📌</span>
-                )}
+      <div className="flex-1 min-h-0">
+        <div className="space-y-4 h-full overflow-y-auto">
+          {filteredNotes.map(note => (
+            <div
+              key={note.id}
+              className={`border rounded-lg p-4 ${note.pinned ? 'border-yellow-300 bg-yellow-50' : 'border-gray-200 bg-white'}`}
+            >
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex items-center space-x-2">
+                  <span className="text-lg">{getCategoryIcon(note.category)}</span>
+                  <h4 className="font-medium text-gray-900">{note.title}</h4>
+                  <span className={`px-2 py-1 text-xs rounded-full ${getCategoryColor(note.category)}`}>
+                    {note.category}
+                  </span>
+                  {note.pinned && (
+                    <span className="text-yellow-500">📌</span>
+                  )}
+                </div>
+                
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => handleTogglePin(note.id)}
+                    className="text-gray-400 hover:text-yellow-500"
+                    title={note.pinned ? 'Unpin' : 'Pin'}
+                  >
+                    📌
+                  </button>
+                  <button
+                    onClick={() => handleEditNote(note)}
+                    className="text-gray-400 hover:text-indigo-600"
+                  >
+                    <PencilIcon className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteNote(note.id)}
+                    className="text-gray-400 hover:text-red-600"
+                  >
+                    <TrashIcon className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
               
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => handleTogglePin(note.id)}
-                  className="text-gray-400 hover:text-yellow-500"
-                  title={note.pinned ? 'Unpin' : 'Pin'}
-                >
-                  📌
-                </button>
-                <button
-                  onClick={() => handleEditNote(note)}
-                  className="text-gray-400 hover:text-indigo-600"
-                >
-                  <PencilIcon className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => handleDeleteNote(note.id)}
-                  className="text-gray-400 hover:text-red-600"
-                >
-                  <TrashIcon className="w-4 h-4" />
-                </button>
+              <p className="text-gray-700 mb-3 whitespace-pre-wrap">{note.content}</p>
+              
+              {note.tags.length > 0 && (
+                <div className="flex flex-wrap gap-1 mb-2">
+                  {note.tags.map(tag => (
+                    <span
+                      key={tag}
+                      className="inline-flex items-center px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded"
+                    >
+                      <TagIcon className="w-3 h-3 mr-1" />
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+              
+              <div className="text-xs text-gray-500">
+                Created: {note.createdAt.toLocaleDateString()} • 
+                Updated: {note.updatedAt.toLocaleDateString()}
               </div>
             </div>
-            
-            <p className="text-gray-700 mb-3 whitespace-pre-wrap">{note.content}</p>
-            
-            {note.tags.length > 0 && (
-              <div className="flex flex-wrap gap-1 mb-2">
-                {note.tags.map(tag => (
-                  <span
-                    key={tag}
-                    className="inline-flex items-center px-2 py-1 text-xs bg-gray-100 text-gray-600 rounded"
-                  >
-                    <TagIcon className="w-3 h-3 mr-1" />
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            )}
-            
-            <div className="text-xs text-gray-500">
-              Created: {note.createdAt.toLocaleDateString()} • 
-              Updated: {note.updatedAt.toLocaleDateString()}
+          ))}
+          
+          {filteredNotes.length === 0 && (
+            <div className="text-center py-8 text-gray-500">
+              {searchTerm || filterCategory !== 'all' 
+                ? 'No notes match your search criteria.' 
+                : 'No notes yet. Add your first note to get started!'}
             </div>
-          </div>
-        ))}
-        
-        {filteredNotes.length === 0 && (
-          <div className="text-center py-8 text-gray-500">
-            {searchTerm || filterCategory !== 'all' 
-              ? 'No notes match your search criteria.' 
-              : 'No notes yet. Add your first note to get started!'}
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   )

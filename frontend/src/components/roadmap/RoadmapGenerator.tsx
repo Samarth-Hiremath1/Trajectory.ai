@@ -347,7 +347,7 @@ export function RoadmapGenerator({
         {/* Generate Button */}
         <div className="pt-4">
           {generateRoadmapOp.loading ? (
-            <RoadmapGenerationLoader progress={generateRoadmapOp.progress} />
+            <RoadmapGenerationLoader />
           ) : (
             <button
               onClick={handleGenerateRoadmap}

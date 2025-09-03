@@ -38,11 +38,9 @@ export async function createProfile(userId: string, profileData: ProfileData): P
   
   try {
     // First try to create via Supabase directly
-    // Temporarily exclude 'name' field until database migration is applied
-    const { name, ...profileDataWithoutName } = profileData
     const insertData = {
       user_id: userId,
-      ...profileDataWithoutName,
+      ...profileData,
     }
     
     console.log('Insert data:', insertData)
