@@ -6,22 +6,14 @@ from datetime import datetime
 
 from models.resume import Resume, ResumeResponse, ProcessingStatus
 from services.resume_service import ResumeProcessingService
+from security.auth import get_current_user_id, require_permission
+from security.input_validation import validate_user_id, ValidationError
+from security.file_security import secure_file_handler
 
 router = APIRouter(prefix="/api/resume", tags=["resume"])
 
 # Initialize resume processing service
 resume_service = ResumeProcessingService()
-
-from fastapi import Header
-
-async def get_current_user_id(x_user_id: str = Header(None)) -> str:
-    """Get user ID from request headers"""
-    if not x_user_id:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User ID not provided in headers"
-        )
-    return x_user_id
 
 
 @router.post("/upload", response_model=ResumeResponse)
@@ -36,6 +28,15 @@ async def upload_resume(
     - Returns: Resume processing status and metadata
     """
     
+    # Validate user ID
+    try:
+        user_id = validate_user_id(user_id)
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid user ID: {str(e)}"
+        )
+    
     # Read file content
     try:
         file_content = await file.read()
@@ -43,6 +44,39 @@ async def upload_resume(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Failed to read uploaded file: {str(e)}"
+        )
+    
+    # Secure file processing
+    try:
+        security_result = await secure_file_handler.process_upload(
+            file_content, file.filename, file.content_type, user_id
+        )
+        
+        if not security_result["success"]:
+            # Clean up temp file if it exists
+            if security_result.get("temp_path"):
+                secure_file_handler.cleanup_temp_file(security_result["temp_path"])
+            
+            error_details = []
+            if security_result["validation_errors"]:
+                error_details.extend(security_result["validation_errors"])
+            if security_result["security_warnings"]:
+                error_details.extend(security_result["security_warnings"])
+            
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File security check failed: {'; '.join(error_details)}"
+            )
+        
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Security processing failed: {str(e)}"
         )
     
     # Process resume with embeddings
@@ -119,11 +153,21 @@ async def upload_resume(
             if result["cleanup_info"].get("file_deleted"):
                 response_data["message"] += " (File deleted due to storage limits)"
         
+        # Clean up temp file after successful processing
+        if security_result.get("temp_path"):
+            secure_file_handler.cleanup_temp_file(security_result["temp_path"])
+        
         return JSONResponse(content=response_data)
         
     except HTTPException:
+        # Clean up temp file on error
+        if 'security_result' in locals() and security_result.get("temp_path"):
+            secure_file_handler.cleanup_temp_file(security_result["temp_path"])
         raise
     except Exception as e:
+        # Clean up temp file on error
+        if 'security_result' in locals() and security_result.get("temp_path"):
+            secure_file_handler.cleanup_temp_file(security_result["temp_path"])
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to process resume: {str(e)}"

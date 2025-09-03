@@ -1,5 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 import uvicorn
 import logging
@@ -15,6 +17,11 @@ for env_path in env_paths:
     if Path(env_path).exists():
         load_dotenv(env_path)
         break
+
+# Import security modules
+from security.rate_limiting import get_rate_limiter, create_rate_limit_middleware
+from security.input_validation import ValidationError
+from security.auth import AuthenticationError, AuthorizationError
 
 from api.resume import router as resume_router
 from api.chat import router as chat_router
@@ -109,17 +116,129 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Failed to cleanup services: {str(e)}")
 
-app = FastAPI(title="Trajectory.AI Backend", version="1.0.0", lifespan=lifespan)
+app = FastAPI(
+    title="Trajectory.AI Backend", 
+    version="1.0.0", 
+    lifespan=lifespan,
+    docs_url="/docs" if os.getenv("ENVIRONMENT") != "production" else None,
+    redoc_url="/redoc" if os.getenv("ENVIRONMENT") != "production" else None
+)
 
-# Configure CORS
+# Security middleware - order matters!
+
+# 1. Trusted Host middleware (prevent host header attacks)
+allowed_hosts = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,*.vercel.app").split(",")
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
+
+# 2. Rate limiting middleware
+rate_limiter = get_rate_limiter()
+rate_limit_middleware = create_rate_limit_middleware(rate_limiter)
+app.middleware("http")(rate_limit_middleware)
+
+# 3. CORS middleware with strict configuration
 cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
+    allow_headers=[
+        "Authorization",
+        "Content-Type", 
+        "X-User-ID",
+        "X-Request-ID",
+        "Accept",
+        "Origin",
+        "User-Agent"
+    ],
+    expose_headers=["X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset"]
 )
+
+# 4. Security headers middleware
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """Add security headers to all responses"""
+    response = await call_next(request)
+    
+    # Security headers
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+    
+    # Content Security Policy
+    csp = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: https:; "
+        "connect-src 'self' https://api.huggingface.co https://*.supabase.co; "
+        "frame-ancestors 'none';"
+    )
+    response.headers["Content-Security-Policy"] = csp
+    
+    # HSTS (only in production with HTTPS)
+    if os.getenv("ENVIRONMENT") == "production":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    
+    return response
+
+# 5. Global exception handlers for security errors
+@app.exception_handler(ValidationError)
+async def validation_exception_handler(request: Request, exc: ValidationError):
+    """Handle validation errors"""
+    logger.warning(f"Validation error from {request.client.host}: {str(exc)}")
+    return JSONResponse(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        content={
+            "error": "Validation Error",
+            "message": str(exc),
+            "type": "validation_error"
+        }
+    )
+
+@app.exception_handler(AuthenticationError)
+async def authentication_exception_handler(request: Request, exc: AuthenticationError):
+    """Handle authentication errors"""
+    logger.warning(f"Authentication error from {request.client.host}: {str(exc)}")
+    return JSONResponse(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        content={
+            "error": "Authentication Error",
+            "message": str(exc),
+            "type": "authentication_error"
+        },
+        headers={"WWW-Authenticate": "Bearer"}
+    )
+
+@app.exception_handler(AuthorizationError)
+async def authorization_exception_handler(request: Request, exc: AuthorizationError):
+    """Handle authorization errors"""
+    logger.warning(f"Authorization error from {request.client.host}: {str(exc)}")
+    return JSONResponse(
+        status_code=status.HTTP_403_FORBIDDEN,
+        content={
+            "error": "Authorization Error",
+            "message": str(exc),
+            "type": "authorization_error"
+        }
+    )
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Handle HTTP exceptions with security logging"""
+    if exc.status_code >= 400:
+        logger.warning(f"HTTP {exc.status_code} from {request.client.host}: {exc.detail}")
+    
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "error": f"HTTP {exc.status_code}",
+            "message": exc.detail,
+            "type": "http_error"
+        }
+    )
 
 
 
