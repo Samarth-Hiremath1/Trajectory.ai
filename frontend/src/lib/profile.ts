@@ -37,48 +37,53 @@ export async function createProfile(userId: string, profileData: ProfileData): P
   console.log('Profile data:', profileData)
   
   try {
-    // First try to create via Supabase directly
-    const insertData = {
-      user_id: userId,
-      ...profileData,
-    }
+    // Use backend API instead of direct Supabase calls
+    const apiUrl = `/api/profile/${userId}`
+    console.log('Making request to:', apiUrl)
+    console.log('Request body:', JSON.stringify(profileData, null, 2))
     
-    console.log('Insert data:', insertData)
-    
-    const { data, error } = await supabase
-      .from('profiles')
-      .insert(insertData)
-      .select()
-      .single()
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-User-Id': userId,
+      },
+      body: JSON.stringify(profileData),
+    })
 
-    if (error) {
-      // If profile already exists, update it instead
-      if (error.code === '23505') {
+    console.log('Response status:', response.status)
+    console.log('Response headers:', Object.fromEntries(response.headers.entries()))
+
+    if (!response.ok) {
+      const responseText = await response.text()
+      console.error('Raw response text:', responseText)
+      
+      let errorData
+      try {
+        errorData = JSON.parse(responseText)
+      } catch {
+        errorData = { detail: `HTTP ${response.status}: ${responseText || 'Profile creation failed'}` }
+      }
+      
+      console.error('Profile creation failed:', errorData)
+      console.error('Response status:', response.status)
+      
+      // If profile already exists, try updating instead
+      if (response.status === 400 && errorData.detail?.includes('already exist')) {
         console.log('Profile already exists, updating instead...')
         return await updateProfile(userId, profileData)
       }
       
-      console.error('Error creating profile:', error)
-      console.error('Error details:', JSON.stringify(error, null, 2))
-      return null
+      throw new Error(errorData.detail || `Failed to create profile (HTTP ${response.status})`)
     }
 
-    console.log('Profile created successfully:', data)
+    const result = await response.json()
+    console.log('Profile created successfully:', result)
     
-    // After successful creation, trigger RAG context refresh via backend API
-    // Temporarily disabled to avoid 500 errors during profile creation
-    try {
-      // Skip the profile context refresh for now to avoid 500 errors
-      console.log('Profile context refresh skipped temporarily')
-    } catch (contextError) {
-      console.warn('Error refreshing profile context:', contextError)
-      // Don't fail profile creation for this
-    }
-    
-    return data
+    return result
   } catch (error) {
     console.error('Error in createProfile:', error)
-    return null
+    throw error
   }
 }
 

@@ -1,0 +1,284 @@
+---
+# Network Policy for monitoring and observability
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: monitoring-access-policy
+  namespace: goaltrajectory-ai
+  labels:
+    app: goaltrajectory-ai
+    component: monitoring
+spec:
+  podSelector:
+    matchLabels:
+      app: goaltrajectory-ai
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow Prometheus to scrape metrics
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    - namespaceSelector:
+        matchLabels:
+          name: prometheus
+    - namespaceSelector:
+        matchLabels:
+          name: observability
+    ports:
+    - protocol: TCP
+      port: 8000  # Backend metrics
+    - protocol: TCP
+      port: 3000  # Frontend metrics
+---
+# Network Policy for ingress traffic control
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ingress-traffic-policy
+  namespace: goaltrajectory-ai
+  labels:
+    app: goaltrajectory-ai
+    component: ingress
+spec:
+  podSelector:
+    matchLabels:
+      app: goaltrajectory-ai
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow traffic from multiple ingress controllers
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - namespaceSelector:
+        matchLabels:
+          name: nginx-ingress
+    - namespaceSelector:
+        matchLabels:
+          name: traefik
+    - namespaceSelector:
+        matchLabels:
+          name: istio-system
+    - namespaceSelector:
+        matchLabels:
+          name: linkerd
+    ports:
+    - protocol: TCP
+      port: 3000  # Frontend
+    - protocol: TCP
+      port: 8000  # Backend API
+---
+# Network Policy for database isolation
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: database-isolation-policy
+  namespace: goaltrajectory-ai
+  labels:
+    app: goaltrajectory-ai
+    component: database-security
+spec:
+  podSelector:
+    matchLabels:
+      component: database
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Strict database access - only from backend
+  - from:
+    - podSelector:
+        matchLabels:
+          app: goaltrajectory-ai
+          component: backend
+    ports:
+    - protocol: TCP
+      port: 8000
+  # Allow health checks from system components
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: TCP
+      port: 8000
+  egress:
+  # Minimal egress for database operations
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # NTP for time synchronization
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 123
+---
+# Network Policy for external API access control
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: external-api-policy
+  namespace: goaltrajectory-ai
+  labels:
+    app: goaltrajectory-ai
+    component: external-access
+spec:
+  podSelector:
+    matchLabels:
+      app: goaltrajectory-ai
+      component: backend
+  policyTypes:
+  - Egress
+  egress:
+  # Allow specific external services (Supabase, AI APIs)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443  # HTTPS
+    - protocol: TCP
+      port: 5432  # PostgreSQL (Supabase)
+  # DNS resolution
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # NTP
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 123
+---
+# Network Policy for service mesh integration (Istio/Linkerd)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: service-mesh-policy
+  namespace: goaltrajectory-ai
+  labels:
+    app: goaltrajectory-ai
+    component: service-mesh
+spec:
+  podSelector:
+    matchLabels:
+      app: goaltrajectory-ai
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow service mesh sidecar communication
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: istio-system
+    - namespaceSelector:
+        matchLabels:
+          name: linkerd
+    - namespaceSelector:
+        matchLabels:
+          name: consul-connect
+  egress:
+  # Allow service mesh sidecar communication
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: istio-system
+    - namespaceSelector:
+        matchLabels:
+          name: linkerd
+    - namespaceSelector:
+        matchLabels:
+          name: consul-connect
+---
+# Network Policy for development environment (less restrictive)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: development-network-policy
+  namespace: goaltrajectory-ai-dev
+  labels:
+    app: goaltrajectory-ai
+    component: development
+    environment: development
+spec:
+  podSelector:
+    matchLabels:
+      app: goaltrajectory-ai
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # More permissive for development
+  - from: []
+    ports:
+    - protocol: TCP
+      port: 3000
+    - protocol: TCP
+      port: 8000
+    - protocol: TCP
+      port: 8080  # Development servers
+    - protocol: TCP
+      port: 5173  # Vite dev server
+  egress:
+  # Allow broader egress for development tools
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 80
+    - protocol: TCP
+      port: 443
+    - protocol: TCP
+      port: 5432
+    - protocol: UDP
+      port: 53
+    - protocol: UDP
+      port: 123
+---
+# Network Policy for security scanning and compliance
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: security-scanning-policy
+  namespace: goaltrajectory-ai
+  labels:
+    app: goaltrajectory-ai
+    component: security
+spec:
+  podSelector:
+    matchLabels:
+      app: goaltrajectory-ai
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow security scanners and compliance tools
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: security
+    - namespaceSelector:
+        matchLabels:
+          name: falco
+    - namespaceSelector:
+        matchLabels:
+          name: twistlock
+    - namespaceSelector:
+        matchLabels:
+          name: aqua
+    ports:
+    - protocol: TCP
+      port: 3000
+    - protocol: TCP
+      port: 8000

@@ -1,0 +1,144 @@
+---
+# Pod Security Standards - Restricted profile for all workloads
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: goaltrajectory-ai
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+# Service Account for Backend
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: backend-service-account
+  namespace: goaltrajectory-ai
+  labels:
+    app: goaltrajectory-ai
+    component: backend
+automountServiceAccountToken: false
+---
+# Service Account for Frontend
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: frontend-service-account
+  namespace: goaltrajectory-ai
+  labels:
+    app: goaltrajectory-ai
+    component: frontend
+automountServiceAccountToken: false
+---
+# Service Account for ChromaDB
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: chromadb-service-account
+  namespace: goaltrajectory-ai
+  labels:
+    app: chromadb
+    component: database
+automountServiceAccountToken: false
+---
+# Security Context Constraints for OpenShift (if applicable)
+apiVersion: security.openshift.io/v1
+kind: SecurityContextConstraints
+metadata:
+  name: goaltrajectory-ai-scc
+  namespace: goaltrajectory-ai
+allowHostDirVolumePlugin: false
+allowHostIPC: false
+allowHostNetwork: false
+allowHostPID: false
+allowHostPorts: false
+allowPrivilegedContainer: false
+allowedCapabilities: []
+defaultAddCapabilities: []
+requiredDropCapabilities:
+- ALL
+fsGroup:
+  type: MustRunAs
+  ranges:
+  - min: 1000
+  - max: 2000
+runAsUser:
+  type: MustRunAsNonRoot
+seLinuxContext:
+  type: MustRunAs
+supplementalGroups:
+  type: MustRunAs
+  ranges:
+  - min: 1000
+  - max: 2000
+volumes:
+- configMap
+- downwardAPI
+- emptyDir
+- persistentVolumeClaim
+- projected
+- secret
+users:
+- system:serviceaccount:goaltrajectory-ai:backend-service-account
+- system:serviceaccount:goaltrajectory-ai:frontend-service-account
+- system:serviceaccount:goaltrajectory-ai:chromadb-service-account
+---
+# RBAC Role for application services
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: goaltrajectory-ai
+  name: goaltrajectory-ai-role
+rules:
+- apiGroups: [""]
+  resources: ["configmaps", "secrets"]
+  verbs: ["get", "list"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "list"]
+---
+# RBAC RoleBinding for Backend
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: backend-rolebinding
+  namespace: goaltrajectory-ai
+subjects:
+- kind: ServiceAccount
+  name: backend-service-account
+  namespace: goaltrajectory-ai
+roleRef:
+  kind: Role
+  name: goaltrajectory-ai-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# RBAC RoleBinding for Frontend
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: frontend-rolebinding
+  namespace: goaltrajectory-ai
+subjects:
+- kind: ServiceAccount
+  name: frontend-service-account
+  namespace: goaltrajectory-ai
+roleRef:
+  kind: Role
+  name: goaltrajectory-ai-role
+  apiGroup: rbac.authorization.k8s.io
+---
+# RBAC RoleBinding for ChromaDB
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: chromadb-rolebinding
+  namespace: goaltrajectory-ai
+subjects:
+- kind: ServiceAccount
+  name: chromadb-service-account
+  namespace: goaltrajectory-ai
+roleRef:
+  kind: Role
+  name: goaltrajectory-ai-role
+  apiGroup: rbac.authorization.k8s.io

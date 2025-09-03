@@ -111,6 +111,51 @@ async def get_profile(user_id: str):
         )
 
 
+@router.post("/{user_id}", response_model=ProfileResponse)
+async def create_profile(
+    user_id: str,
+    profile_data: ProfileUpdateRequest
+):
+    """
+    Create a new user profile
+    
+    - **user_id**: ID of the user for whom to create the profile
+    - **profile_data**: Profile information
+    - Returns: Created profile data
+    """
+    try:
+        # TODO: Add proper authorization check to ensure user can only create their own profile
+        
+        # Convert profile data to dict for database storage
+        create_data = profile_data.model_dump(exclude_unset=True)
+        
+        # Create profile in database
+        created_profile = await get_db_service().create_profile(user_id, create_data)
+        if not created_profile:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Profile creation failed - profile may already exist"
+            )
+        
+        # Trigger RAG context update in background
+        try:
+            await _refresh_user_rag_context(user_id)
+            await _refresh_chat_service_context(user_id)
+        except Exception as e:
+            # Log the error but don't fail the profile creation
+            print(f"Warning: Failed to refresh RAG context for user {user_id}: {e}")
+        
+        return ProfileResponse(**created_profile)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create profile: {str(e)}"
+        )
+
+
 @router.put("/{user_id}", response_model=ProfileResponse)
 async def update_profile(
     user_id: str,

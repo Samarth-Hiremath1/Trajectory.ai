@@ -80,9 +80,22 @@ export default function OnboardingWizard() {
           body: formData
         })
         
+        console.log('Resume upload response status:', resumeResponse.status)
+        console.log('Resume upload response headers:', Object.fromEntries(resumeResponse.headers.entries()))
+        
         if (!resumeResponse.ok) {
-          const errorData = await resumeResponse.json().catch(() => ({}))
-          throw new Error(errorData.detail || 'Failed to upload resume')
+          const responseText = await resumeResponse.text()
+          console.error('Resume upload failed - raw response:', responseText)
+          
+          let errorData
+          try {
+            errorData = JSON.parse(responseText)
+          } catch {
+            errorData = { detail: `HTTP ${resumeResponse.status}: ${responseText}` }
+          }
+          
+          console.error('Resume upload failed - parsed error:', errorData)
+          throw new Error(errorData.error || errorData.detail || 'Failed to upload resume')
         }
         
         const resumeResult = await resumeResponse.json()

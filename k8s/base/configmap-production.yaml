@@ -1,0 +1,81 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config-production
+  namespace: goaltrajectory-prod
+  labels:
+    app: goaltrajectory
+    environment: production
+data:
+  # Environment Configuration
+  ENVIRONMENT: "production"
+  NODE_ENV: "production"
+  FASTAPI_ENV: "production"
+  
+  # Application URLs
+  FRONTEND_URL: "https://goaltrajectory.ai"
+  BACKEND_URL: "https://api.goaltrajectory.ai"
+  NEXT_PUBLIC_API_URL: "https://api.goaltrajectory.ai"
+  NEXT_PUBLIC_FRONTEND_URL: "https://goaltrajectory.ai"
+  
+  # Database Configuration
+  POSTGRES_DB: "goaltrajectory_prod"
+  POSTGRES_HOST: "postgres-service"
+  POSTGRES_PORT: "5432"
+  
+  # ChromaDB Configuration
+  CHROMA_HOST: "chromadb-service"
+  CHROMA_PORT: "8000"
+  CHROMA_PERSIST_DIR: "/data/chroma"
+  USE_PERSISTENT_CHROMADB: "true"
+  CHROMA_MAX_MEMORY: "2GB"
+  CHROMA_LOG_LEVEL: "INFO"
+  
+  # Redis Configuration
+  REDIS_HOST: "redis-service"
+  REDIS_PORT: "6379"
+  REDIS_DB: "0"
+  
+  # Logging Configuration
+  LOG_LEVEL: "INFO"
+  LOG_FORMAT: "json"
+  DEBUG: "false"
+  
+  # Performance Configuration
+  MAX_WORKERS: "4"
+  WORKER_TIMEOUT: "120"
+  KEEP_ALIVE: "5"
+  
+  # Security Configuration
+  RATE_LIMIT_ENABLED: "true"
+  RATE_LIMIT_REQUESTS_PER_MINUTE: "100"
+  RATE_LIMIT_BURST: "20"
+  
+  # Feature Flags
+  ENABLE_DOCS: "false"
+  ENABLE_METRICS: "true"
+  ENABLE_PROFILER: "false"
+  
+  # Monitoring Configuration
+  PROMETHEUS_METRICS_ENABLED: "true"
+  HEALTH_CHECK_TIMEOUT: "10"
+  
+  # Storage Configuration
+  STORAGE_PROVIDER: "supabase"
+  MAX_FILE_SIZE: "52428800"  # 50MB
+  
+  # NextAuth Configuration
+  NEXTAUTH_URL: "https://goaltrajectory.ai"
+  
+  # Production Optimizations
+  NEXT_TELEMETRY_DISABLED: "1"
+  NEXT_PUBLIC_ENABLE_ANALYTICS: "true"
+  NEXT_PUBLIC_ENABLE_ERROR_REPORTING: "true"
+  NEXT_PUBLIC_DEBUG_MODE: "false"
+  
+  # CORS Configuration
+  CORS_ORIGINS: '["https://goaltrajectory.ai", "https://www.goaltrajectory.ai"]'
+  
+  # Cache Configuration
+  CACHE_TTL: "3600"
+  ENABLE_RESPONSE_CACHING: "true"

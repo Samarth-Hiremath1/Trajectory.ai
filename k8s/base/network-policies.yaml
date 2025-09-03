@@ -1,0 +1,250 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: frontend-network-policy
+  namespace: goaltrajectory-ai
+  labels:
+    app: goaltrajectory-ai
+    component: frontend
+spec:
+  podSelector:
+    matchLabels:
+      app: goaltrajectory-ai
+      component: frontend
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow ingress from ingress controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - namespaceSelector:
+        matchLabels:
+          name: nginx-ingress
+    - namespaceSelector:
+        matchLabels:
+          name: traefik
+    ports:
+    - protocol: TCP
+      port: 3000
+  # Allow health checks from Kubernetes system
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: TCP
+      port: 3000
+  egress:
+  # Allow egress to backend API
+  - to:
+    - podSelector:
+        matchLabels:
+          app: goaltrajectory-ai
+          component: backend
+    ports:
+    - protocol: TCP
+      port: 8000
+  # Allow DNS resolution (kube-dns/coredns)
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Allow HTTPS for CDN and external assets (restricted to specific ports)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  # Allow NTP for time synchronization
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 123
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-network-policy
+  namespace: goaltrajectory-ai
+  labels:
+    app: goaltrajectory-ai
+    component: backend
+spec:
+  podSelector:
+    matchLabels:
+      app: goaltrajectory-ai
+      component: backend
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow ingress from frontend
+  - from:
+    - podSelector:
+        matchLabels:
+          app: goaltrajectory-ai
+          component: frontend
+    ports:
+    - protocol: TCP
+      port: 8000
+  # Allow ingress from ingress controller for direct API calls
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    - namespaceSelector:
+        matchLabels:
+          name: nginx-ingress
+    - namespaceSelector:
+        matchLabels:
+          name: traefik
+    ports:
+    - protocol: TCP
+      port: 8000
+  # Allow health checks from Kubernetes system
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: TCP
+      port: 8000
+  # Allow monitoring from prometheus namespace
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    - namespaceSelector:
+        matchLabels:
+          name: prometheus
+    ports:
+    - protocol: TCP
+      port: 8000
+  egress:
+  # Allow egress to ChromaDB
+  - to:
+    - podSelector:
+        matchLabels:
+          app: chromadb
+          component: database
+    ports:
+    - protocol: TCP
+      port: 8000
+  # Allow DNS resolution (kube-dns/coredns)
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Allow HTTPS for external API calls (Supabase, OpenAI, etc.)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+  # Allow PostgreSQL connections (Supabase)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 5432
+  # Allow NTP for time synchronization
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 123
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: chromadb-network-policy
+  namespace: goaltrajectory-ai
+  labels:
+    app: chromadb
+    component: database
+spec:
+  podSelector:
+    matchLabels:
+      app: chromadb
+      component: database
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Only allow ingress from backend
+  - from:
+    - podSelector:
+        matchLabels:
+          app: goaltrajectory-ai
+          component: backend
+    ports:
+    - protocol: TCP
+      port: 8000
+  # Allow health checks from Kubernetes system
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: TCP
+      port: 8000
+  # Allow monitoring from prometheus namespace
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    - namespaceSelector:
+        matchLabels:
+          name: prometheus
+    ports:
+    - protocol: TCP
+      port: 8000
+  egress:
+  # Allow DNS resolution (kube-dns/coredns)
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Allow NTP for time synchronization
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 123
+  # Minimal HTTPS egress for container registry and updates (if needed)
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: goaltrajectory-ai
+  labels:
+    app: goaltrajectory-ai
+    component: security
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  # This policy denies all traffic by default
+  # Specific policies above will allow necessary traffic

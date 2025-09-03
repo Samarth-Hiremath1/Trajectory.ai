@@ -8,7 +8,8 @@ const withBundleAnalyzer = require('@next/bundle-analyzer')({
 const nextConfig: NextConfig = {
   // Performance optimizations
   experimental: {
-    optimizeCss: true,
+    // Disable optimizeCss for now due to critters dependency issue in Docker
+    // optimizeCss: true,
     optimizePackageImports: ['@heroicons/react', 'ldrs'],
   },
   

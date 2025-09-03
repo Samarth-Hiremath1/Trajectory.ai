@@ -1,0 +1,74 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: goaltrajectory-ai
+  labels:
+    app: goaltrajectory-ai
+    component: config
+data:
+  # Environment configuration
+  ENVIRONMENT: "production"
+  NODE_ENV: "production"
+  
+  # Service endpoints
+  CHROMA_HOST: "chromadb-service"
+  CHROMA_PORT: "8000"
+  BACKEND_HOST: "backend-service"
+  BACKEND_PORT: "8000"
+  FRONTEND_HOST: "frontend-service"
+  FRONTEND_PORT: "3000"
+  
+  # Database configuration
+  CHROMA_PERSIST_DIRECTORY: "/chroma/data"
+  
+  # Logging configuration
+  LOG_LEVEL: "INFO"
+  LOG_FORMAT: "json"
+  
+  # Application configuration
+  CORS_ORIGINS: "https://goaltrajectory.ai,https://www.goaltrajectory.ai"
+  API_PREFIX: "/api/v1"
+  
+  # Performance settings
+  WORKERS: "4"
+  MAX_CONNECTIONS: "100"
+  TIMEOUT: "30"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config-dev
+  namespace: goaltrajectory-ai
+  labels:
+    app: goaltrajectory-ai
+    component: config
+    environment: development
+data:
+  # Development environment configuration
+  ENVIRONMENT: "development"
+  NODE_ENV: "development"
+  
+  # Service endpoints (same as production for consistency)
+  CHROMA_HOST: "chromadb-service"
+  CHROMA_PORT: "8000"
+  BACKEND_HOST: "backend-service"
+  BACKEND_PORT: "8000"
+  FRONTEND_HOST: "frontend-service"
+  FRONTEND_PORT: "3000"
+  
+  # Database configuration
+  CHROMA_PERSIST_DIRECTORY: "/chroma/data"
+  
+  # Development logging
+  LOG_LEVEL: "DEBUG"
+  LOG_FORMAT: "json"
+  
+  # Development CORS (more permissive)
+  CORS_ORIGINS: "*"
+  API_PREFIX: "/api/v1"
+  
+  # Development performance settings
+  WORKERS: "2"
+  MAX_CONNECTIONS: "50"
+  TIMEOUT: "60"

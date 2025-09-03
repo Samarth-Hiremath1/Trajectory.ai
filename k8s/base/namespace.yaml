@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: goaltrajectory-ai
+  labels:
+    app: goaltrajectory-ai
+    environment: production
+    version: v1
+  annotations:
+    description: "GoalTrajectory.AI application namespace for service isolation"

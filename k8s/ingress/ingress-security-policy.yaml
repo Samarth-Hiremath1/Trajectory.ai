@@ -1,0 +1,224 @@
+---
+# Network Policy for Ingress Controller Access
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ingress-controller-policy
+  namespace: goaltrajectory-ai
+  labels:
+    app: goaltrajectory-ai
+    component: ingress-security
+spec:
+  podSelector:
+    matchLabels:
+      app: goaltrajectory-ai
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow traffic from ingress controllers
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: ingress-nginx
+    - namespaceSelector:
+        matchLabels:
+          name: nginx-ingress
+      podSelector:
+        matchLabels:
+          app: nginx-ingress
+    - namespaceSelector:
+        matchLabels:
+          name: traefik
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: traefik
+    ports:
+    - protocol: TCP
+      port: 3000  # Frontend
+    - protocol: TCP
+      port: 8000  # Backend
+---
+# Rate Limiting Policy using Kubernetes native resources
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: rate-limiting-policy
+  namespace: goaltrajectory-ai
+  labels:
+    app: goaltrajectory-ai
+    component: rate-limiting
+spec:
+  podSelector:
+    matchLabels:
+      app: goaltrajectory-ai
+  policyTypes:
+  - Ingress
+  ingress:
+  # Apply rate limiting through ingress controller
+  - from: []
+    ports:
+    - protocol: TCP
+      port: 3000
+    - protocol: TCP
+      port: 8000
+---
+# DDoS Protection Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ddos-protection-policy
+  namespace: goaltrajectory-ai
+  labels:
+    app: goaltrajectory-ai
+    component: ddos-protection
+spec:
+  podSelector:
+    matchLabels:
+      app: goaltrajectory-ai
+  policyTypes:
+  - Ingress
+  ingress:
+  # Limit concurrent connections per source
+  - from: []
+    ports:
+    - protocol: TCP
+      port: 3000
+    - protocol: TCP
+      port: 8000
+---
+# WAF (Web Application Firewall) Integration Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: waf-integration-policy
+  namespace: goaltrajectory-ai
+  labels:
+    app: goaltrajectory-ai
+    component: waf
+spec:
+  podSelector:
+    matchLabels:
+      app: goaltrajectory-ai
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow traffic from WAF services
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: modsecurity
+    - namespaceSelector:
+        matchLabels:
+          name: cloudflare
+    - namespaceSelector:
+        matchLabels:
+          name: aws-waf
+    ports:
+    - protocol: TCP
+      port: 3000
+    - protocol: TCP
+      port: 8000
+---
+# API Security Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: api-security-policy
+  namespace: goaltrajectory-ai
+  labels:
+    app: goaltrajectory-ai
+    component: api-security
+spec:
+  podSelector:
+    matchLabels:
+      app: goaltrajectory-ai
+      component: backend
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Strict API access control
+  - from:
+    - podSelector:
+        matchLabels:
+          app: goaltrajectory-ai
+          component: frontend
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 8000
+  egress:
+  # API can only access specific external services
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443  # HTTPS APIs
+    - protocol: TCP
+      port: 5432  # PostgreSQL
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+---
+# Geo-blocking Network Policy (conceptual - requires external implementation)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: geo-blocking-policy
+  namespace: goaltrajectory-ai
+  labels:
+    app: goaltrajectory-ai
+    component: geo-blocking
+  annotations:
+    # This would be implemented at the ingress controller or load balancer level
+    security.goaltrajectory.ai/allowed-countries: "US,CA,GB,AU,DE,FR,JP"
+    security.goaltrajectory.ai/blocked-countries: "CN,RU,KP,IR"
+spec:
+  podSelector:
+    matchLabels:
+      app: goaltrajectory-ai
+  policyTypes:
+  - Ingress
+  ingress:
+  - from: []
+    ports:
+    - protocol: TCP
+      port: 3000
+    - protocol: TCP
+      port: 8000
+---
+# Bot Protection Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: bot-protection-policy
+  namespace: goaltrajectory-ai
+  labels:
+    app: goaltrajectory-ai
+    component: bot-protection
+  annotations:
+    # Bot protection rules (implemented at ingress level)
+    security.goaltrajectory.ai/block-bad-bots: "true"
+    security.goaltrajectory.ai/allow-good-bots: "googlebot,bingbot,slurp"
+    security.goaltrajectory.ai/challenge-suspicious: "true"
+spec:
+  podSelector:
+    matchLabels:
+      app: goaltrajectory-ai
+  policyTypes:
+  - Ingress
+  ingress:
+  - from: []
+    ports:
+    - protocol: TCP
+      port: 3000
+    - protocol: TCP
+      port: 8000

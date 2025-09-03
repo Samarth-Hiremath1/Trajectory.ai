@@ -1,0 +1,87 @@
+# Production-optimized multi-stage Dockerfile for GoalTrajectory.AI Backend
+# Stage 1: Build stage with all dependencies
+FROM python:3.11-slim AS builder
+
+# Set build arguments
+ARG DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies needed for building Python packages
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    gcc \
+    g++ \
+    libffi-dev \
+    libssl-dev \
+    libmagic-dev \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy production requirements for better layer caching
+COPY requirements-prod.txt .
+
+# Create virtual environment and install dependencies
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Upgrade pip and install production dependencies only
+RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip install --no-cache-dir -r requirements-prod.txt
+
+# Stage 2: Production runtime stage
+FROM python:3.11-slim AS production
+
+# Set production environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/opt/venv/bin:$PATH" \
+    ENVIRONMENT=production \
+    WORKERS=4
+
+# Install only essential runtime system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    ca-certificates \
+    libmagic1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean \
+    && apt-get autoremove -y
+
+# Create non-root user and group with specific UID/GID for security
+RUN groupadd -r appgroup -g 1001 && \
+    useradd -r -g appgroup -u 1001 -m -d /home/appuser appuser
+
+# Copy virtual environment from builder stage
+COPY --from=builder /opt/venv /opt/venv
+
+# Set working directory
+WORKDIR /app
+
+# Copy application code with proper ownership
+COPY --chown=appuser:appgroup . .
+
+# Create necessary directories with proper permissions
+RUN mkdir -p /app/uploads/resumes /app/logs && \
+    chown -R appuser:appgroup /app && \
+    chmod -R 755 /app
+
+# Switch to non-root user
+USER appuser
+
+# Expose the application port
+EXPOSE 8000
+
+# Add comprehensive health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Use production-optimized uvicorn settings
+CMD ["uvicorn", "main:app", \
+     "--host", "0.0.0.0", \
+     "--port", "8000", \
+     "--workers", "4", \
+     "--access-log", \
+     "--log-level", "info"]

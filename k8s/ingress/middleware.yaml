@@ -1,0 +1,376 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-ingress-middleware
+  namespace: goaltrajectory
+data:
+  # Rate limiting configuration
+  rate-limit.lua: |
+    local limit_req = require "resty.limit.req"
+    local lrucache = require "resty.lrucache"
+    
+    -- Create cache for rate limiting
+    local cache, err = lrucache.new(1000)
+    if not cache then
+        ngx.log(ngx.ERR, "failed to create cache: ", err)
+        return
+    end
+    
+    -- Rate limiting: 60 requests per minute per IP
+    local limiter, err = limit_req.new("rate_limit_store", 60, 60)
+    if not limiter then
+        ngx.log(ngx.ERR, "failed to instantiate limiter: ", err)
+        return
+    end
+    
+    local key = ngx.var.binary_remote_addr
+    local delay, err = limiter:incoming(key, true)
+    
+    if not delay then
+        if err == "rejected" then
+            ngx.status = 429
+            ngx.header["Content-Type"] = "application/json"
+            ngx.say('{"error": "Rate limit exceeded", "retry_after": 60}')
+            ngx.exit(429)
+        end
+        ngx.log(ngx.ERR, "failed to limit req: ", err)
+        return
+    end
+
+  # Security headers configuration
+  security-headers.conf: |
+    # Security headers
+    add_header X-Frame-Options "DENY" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=(), accelerometer=()" always;
+    
+    # HSTS header (only for HTTPS)
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+    
+    # Content Security Policy (enhanced)
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net; font-src 'self' https://fonts.gstatic.com https://cdn.jsdelivr.net; img-src 'self' data: https: blob:; connect-src 'self' https: wss:; media-src 'self' https:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; upgrade-insecure-requests;" always;
+    
+    # Additional security headers
+    add_header X-Permitted-Cross-Domain-Policies "none" always;
+    add_header Cross-Origin-Embedder-Policy "require-corp" always;
+    add_header Cross-Origin-Opener-Policy "same-origin" always;
+    add_header Cross-Origin-Resource-Policy "same-origin" always;
+
+  # CORS configuration
+  cors.conf: |
+    # Handle preflight requests
+    if ($request_method = 'OPTIONS') {
+        add_header 'Access-Control-Allow-Origin' '$http_origin' always;
+        add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS' always;
+        add_header 'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization' always;
+        add_header 'Access-Control-Allow-Credentials' 'true' always;
+        add_header 'Access-Control-Max-Age' 1728000 always;
+        add_header 'Content-Type' 'text/plain; charset=utf-8' always;
+        add_header 'Content-Length' 0 always;
+        return 204;
+    }
+    
+    # Add CORS headers to actual requests
+    add_header 'Access-Control-Allow-Origin' '$http_origin' always;
+    add_header 'Access-Control-Allow-Methods' 'GET, POST, PUT, DELETE, OPTIONS' always;
+    add_header 'Access-Control-Allow-Headers' 'DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization' always;
+    add_header 'Access-Control-Allow-Credentials' 'true' always;
+    add_header 'Access-Control-Expose-Headers' 'Content-Length,Content-Range' always;
+
+---
+# Rate limiting configuration using NGINX ingress annotations
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-rate-limit-config
+  namespace: goaltrajectory
+data:
+  # Global rate limiting configuration
+  rate-limit-rpm: "60"
+  rate-limit-rps: "10"
+  rate-limit-connections: "10"
+  
+  # API-specific rate limiting
+  api-rate-limit-rpm: "120"
+  api-rate-limit-rps: "20"
+  
+  # Static content rate limiting (more permissive)
+  static-rate-limit-rpm: "300"
+  static-rate-limit-rps: "50"
+
+---
+# SSL/TLS configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-ssl-config
+  namespace: goaltrajectory
+data:
+  ssl-protocols: "TLSv1.2 TLSv1.3"
+  ssl-ciphers: "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384"
+  ssl-prefer-server-ciphers: "on"
+  ssl-session-cache: "shared:SSL:10m"
+  ssl-session-timeout: "10m"
+  ssl-buffer-size: "4k"
+  # Bot pr
+otection and user agent filtering
+  bot-protection.lua: |
+    local user_agent = ngx.var.http_user_agent or ""
+    local remote_addr = ngx.var.remote_addr or ""
+    
+    -- Block known bad bots and scrapers
+    local bad_bots = {
+        "semrushbot", "ahrefsbot", "mj12bot", "dotbot", "blexbot",
+        "serpstatbot", "linkdexbot", "spbot", "megaindex", "ltx71",
+        "netcrawl", "sqlmap", "nikto", "nmap", "masscan", "zmap"
+    }
+    
+    -- Allow good bots
+    local good_bots = {
+        "googlebot", "bingbot", "slurp", "duckduckbot", "baiduspider",
+        "yandexbot", "facebookexternalhit", "twitterbot", "linkedinbot"
+    }
+    
+    local ua_lower = string.lower(user_agent)
+    
+    -- Check for good bots first
+    for _, bot in ipairs(good_bots) do
+        if string.find(ua_lower, bot) then
+            return  -- Allow good bots
+        end
+    end
+    
+    -- Check for bad bots
+    for _, bot in ipairs(bad_bots) do
+        if string.find(ua_lower, bot) then
+            ngx.status = 403
+            ngx.header["Content-Type"] = "application/json"
+            ngx.say('{"error": "Access denied", "reason": "Blocked user agent"}')
+            ngx.exit(403)
+        end
+    end
+    
+    -- Block empty or suspicious user agents
+    if user_agent == "" or string.len(user_agent) < 10 then
+        ngx.status = 403
+        ngx.header["Content-Type"] = "application/json"
+        ngx.say('{"error": "Access denied", "reason": "Invalid user agent"}')
+        ngx.exit(403)
+    end
+
+  # IP reputation and geo-blocking
+  ip-security.lua: |
+    local remote_addr = ngx.var.remote_addr or ""
+    local country_code = ngx.var.geoip_country_code or ""
+    
+    -- Block known malicious IP ranges (example)
+    local blocked_ranges = {
+        "10.0.0.0/8",     -- Private networks (if public-facing)
+        "172.16.0.0/12",  -- Private networks
+        "192.168.0.0/16", -- Private networks
+        "127.0.0.0/8"     -- Loopback
+    }
+    
+    -- Allowed countries (ISO 3166-1 alpha-2)
+    local allowed_countries = {
+        "US", "CA", "GB", "AU", "DE", "FR", "JP", "NL", "SE", "NO",
+        "DK", "FI", "CH", "AT", "BE", "IT", "ES", "PT", "IE", "NZ"
+    }
+    
+    -- Check country restrictions
+    if country_code ~= "" then
+        local country_allowed = false
+        for _, country in ipairs(allowed_countries) do
+            if country_code == country then
+                country_allowed = true
+                break
+            end
+        end
+        
+        if not country_allowed then
+            ngx.status = 403
+            ngx.header["Content-Type"] = "application/json"
+            ngx.say('{"error": "Access denied", "reason": "Geographic restriction"}')
+            ngx.exit(403)
+        end
+    end
+
+  # Request validation and sanitization
+  request-validation.lua: |
+    local method = ngx.var.request_method
+    local uri = ngx.var.uri
+    local args = ngx.var.args or ""
+    
+    -- Block dangerous HTTP methods
+    local blocked_methods = {"TRACE", "TRACK", "DEBUG", "CONNECT"}
+    for _, blocked_method in ipairs(blocked_methods) do
+        if method == blocked_method then
+            ngx.status = 405
+            ngx.header["Content-Type"] = "application/json"
+            ngx.say('{"error": "Method not allowed"}')
+            ngx.exit(405)
+        end
+    end
+    
+    -- Block requests with suspicious patterns
+    local suspicious_patterns = {
+        "%.%.%/",           -- Directory traversal
+        "%<script",         -- XSS attempts
+        "javascript:",      -- JavaScript injection
+        "vbscript:",        -- VBScript injection
+        "onload=",          -- Event handler injection
+        "onerror=",         -- Event handler injection
+        "eval%(",           -- Code evaluation
+        "expression%(",     -- CSS expression
+        "union.*select",    -- SQL injection
+        "insert.*into",     -- SQL injection
+        "delete.*from",     -- SQL injection
+        "drop.*table"       -- SQL injection
+    }
+    
+    local full_request = uri .. "?" .. args
+    for _, pattern in ipairs(suspicious_patterns) do
+        if string.find(string.lower(full_request), pattern) then
+            ngx.status = 403
+            ngx.header["Content-Type"] = "application/json"
+            ngx.say('{"error": "Malicious request detected"}')
+            ngx.exit(403)
+        end
+    end
+
+---
+# WAF (Web Application Firewall) Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-waf-config
+  namespace: goaltrajectory
+data:
+  # ModSecurity configuration
+  modsecurity.conf: |
+    # Enable ModSecurity
+    SecRuleEngine On
+    SecRequestBodyAccess On
+    SecResponseBodyAccess Off
+    
+    # Request body limits
+    SecRequestBodyLimit 13107200
+    SecRequestBodyNoFilesLimit 131072
+    
+    # Audit logging
+    SecAuditEngine RelevantOnly
+    SecAuditLogRelevantStatus "^(?:5|4(?!04))"
+    SecAuditLogParts ABIJDEFHZ
+    SecAuditLogType Serial
+    SecAuditLog /var/log/nginx/modsec_audit.log
+    
+    # Core Rule Set (CRS) inclusion
+    Include /etc/nginx/modsecurity/crs/crs-setup.conf
+    Include /etc/nginx/modsecurity/crs/rules/*.conf
+    
+    # Custom rules for GoalTrajectory.AI
+    SecRule REQUEST_HEADERS:User-Agent "@detectSQLi" \
+        "id:1001,phase:1,block,msg:'SQL Injection in User-Agent',logdata:'Matched Data: %{MATCHED_VAR} found within %{MATCHED_VAR_NAME}'"
+    
+    SecRule ARGS "@detectXSS" \
+        "id:1002,phase:2,block,msg:'XSS Attack Detected',logdata:'Matched Data: %{MATCHED_VAR} found within %{MATCHED_VAR_NAME}'"
+    
+    SecRule REQUEST_FILENAME "@detectSQLi" \
+        "id:1003,phase:1,block,msg:'SQL Injection in Request Filename',logdata:'Matched Data: %{MATCHED_VAR} found within %{MATCHED_VAR_NAME}'"
+
+  # Rate limiting rules
+  rate-limit-rules.conf: |
+    # Different rate limits for different endpoints
+    location /api/auth/ {
+        limit_req zone=auth burst=5 nodelay;
+        limit_req_status 429;
+    }
+    
+    location /api/upload/ {
+        limit_req zone=upload burst=2 nodelay;
+        limit_req_status 429;
+        client_max_body_size 10M;
+    }
+    
+    location /api/ {
+        limit_req zone=api burst=10 nodelay;
+        limit_req_status 429;
+    }
+    
+    location / {
+        limit_req zone=general burst=20 nodelay;
+        limit_req_status 429;
+    }
+
+---
+# Security monitoring and alerting
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: security-monitoring-config
+  namespace: goaltrajectory
+data:
+  # Fail2ban-like configuration for Kubernetes
+  security-rules.yaml: |
+    rules:
+      - name: "repeated_403_errors"
+        pattern: "status:403"
+        threshold: 10
+        window: "5m"
+        action: "ban_ip"
+        duration: "1h"
+      
+      - name: "sql_injection_attempts"
+        pattern: "modsecurity.*SQL Injection"
+        threshold: 3
+        window: "1m"
+        action: "ban_ip"
+        duration: "24h"
+      
+      - name: "xss_attempts"
+        pattern: "modsecurity.*XSS Attack"
+        threshold: 3
+        window: "1m"
+        action: "ban_ip"
+        duration: "24h"
+      
+      - name: "rate_limit_exceeded"
+        pattern: "status:429"
+        threshold: 50
+        window: "10m"
+        action: "ban_ip"
+        duration: "30m"
+
+  # Prometheus alerting rules
+  prometheus-alerts.yaml: |
+    groups:
+    - name: security.rules
+      rules:
+      - alert: HighErrorRate
+        expr: rate(nginx_ingress_controller_requests{status=~"4.."}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High 4xx error rate detected"
+          description: "Error rate is {{ $value }} errors per second"
+      
+      - alert: SecurityIncident
+        expr: rate(nginx_ingress_controller_requests{status="403"}[1m]) > 0.05
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Potential security incident detected"
+          description: "High rate of 403 responses: {{ $value }} per second"
+      
+      - alert: DDoSAttack
+        expr: rate(nginx_ingress_controller_requests[1m]) > 100
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Potential DDoS attack detected"
+          description: "Request rate is {{ $value }} requests per second"

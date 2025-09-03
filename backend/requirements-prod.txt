@@ -1,0 +1,38 @@
+# Production dependencies only - optimized for container deployment
+fastapi>=0.104.1
+uvicorn[standard]>=0.24.0
+python-multipart==0.0.6
+pydantic>=2.7.4
+python-dotenv==1.0.0
+langchain>=0.1.17
+langchain-community>=0.0.38
+langgraph>=0.0.55
+langchain-core>=0.1.52
+redis>=5.0.0
+chromadb==0.4.24
+numpy<2.0.0
+sentence-transformers>=2.3.0
+pdfplumber==0.10.3
+unstructured==0.11.8
+supabase==2.0.0
+httpx>=0.24.0
+huggingface-hub>=0.19.0
+aiohttp>=3.9.0
+asyncio-throttle>=1.0.2
+google-generativeai>=0.3.0
+beautifulsoup4>=4.12.0
+
+# Performance monitoring dependencies
+asyncpg>=0.29.0
+psutil>=5.9.0
+
+# Production performance dependencies
+uvloop>=0.19.0
+httptools>=0.6.0
+
+# Security dependencies
+bleach>=6.1.0
+python-magic>=0.4.27
+yara-python>=4.3.1
+PyJWT>=2.8.0
+cryptography>=41.0.0

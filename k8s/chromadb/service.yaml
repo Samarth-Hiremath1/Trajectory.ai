@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: chromadb-service
+  namespace: goaltrajectory-ai
+  labels:
+    app: chromadb
+    component: database
+spec:
+  type: ClusterIP
+  ports:
+  - port: 8000
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  selector:
+    app: chromadb
+---
+# Headless service for StatefulSet (if needed for clustering in future)
+apiVersion: v1
+kind: Service
+metadata:
+  name: chromadb-headless
+  namespace: goaltrajectory-ai
+  labels:
+    app: chromadb
+    component: database
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - port: 8000
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  selector:
+    app: chromadb

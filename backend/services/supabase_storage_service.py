@@ -27,8 +27,13 @@ class SupabaseStorageService:
         
         # Use service key for admin operations if available
         if self.supabase_service_key:
-            self.supabase_admin: Client = create_client(self.supabase_url, self.supabase_service_key)
+            self.supabase_admin: Client = create_client(
+                self.supabase_url, 
+                self.supabase_service_key
+            )
+            logger.info(f"✅ Using service role key for storage operations (key ends with: ...{self.supabase_service_key[-10:]})")
         else:
+            logger.warning("⚠️ No service role key found, using anon key for storage operations")
             self.supabase_admin = self.supabase
         
         self.bucket_name = "resumes"

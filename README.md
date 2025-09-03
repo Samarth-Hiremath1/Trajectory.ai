@@ -59,7 +59,47 @@ For detailed structure information, see [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE
 
 ### Infrastructure
 - **Containerization**: Docker & Docker Compose
-- **Deployment**: Vercel (frontend), Kubernetes (backend)
+- **Orchestration**: Kubernetes with Helm charts
+- **Deployment**: Multi-environment (dev/staging/prod)
+- **Monitoring**: Health checks, metrics, and logging
+
+## To Run:
+
+### Option 1: Traditional for development
+Backend
+```
+cd backend
+python3 -m venv venv
+source venv/bin/activate  # On macOS/Linux
+pip install -r requirements.txt
+python main.py
+```
+
+Frontend
+Frontend
+
+
+cd frontend
+npm install
+npm run dev
+
+### Option 2: Docker Compose
+Development Environment (with hot reloading)
+```
+# Start all services with hot reloading
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+```
+
+```
+# Or start specific services
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up backend chromadb
+Production-like Environment
+```
+
+```
+# Start production-like containers
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build
+```
 
 ## Development Setup
 
@@ -86,11 +126,81 @@ python main.py
 ```
 The backend API will be available at http://localhost:8000
 
-### Docker Setup (Optional)
+## 🐳 Docker & Kubernetes Deployment
+
+### Quick Start with Docker Compose
+
+For local development:
 ```bash
-docker compose up --build
+# Development environment with hot reloading
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+
+# Production-like environment
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build
 ```
-This will start both the backend API and ChromaDB services.
+
+### Container Management
+
+Build container images:
+```bash
+# Build all services for development
+./scripts/build.sh dev all
+
+# Build specific service for production
+./scripts/build.sh prod backend
+```
+
+Validate configurations:
+```bash
+# Validate all configurations
+./scripts/validate.sh all dev
+
+# Validate only Kubernetes manifests
+./scripts/validate.sh k8s prod
+```
+
+### Kubernetes Deployment
+
+Deploy to Kubernetes cluster:
+```bash
+# Deploy to development environment
+./scripts/deploy.sh dev deploy
+
+# Deploy to production environment
+./scripts/deploy.sh prod deploy
+
+# Check deployment status
+./scripts/deploy.sh prod status
+
+# View logs
+./scripts/deploy.sh dev logs backend
+```
+
+Rollback deployments:
+```bash
+# Rollback to previous version
+./scripts/rollback.sh prod backend previous
+
+# Rollback to specific revision
+./scripts/rollback.sh staging frontend 3
+
+# Show rollout history
+./scripts/rollback.sh prod all history
+```
+
+For detailed deployment instructions, see [docs/deployment/](docs/deployment/).
+
+## 📚 Documentation
+
+### Deployment & Operations
+- [Deployment Guide](docs/deployment/README.md) - Complete deployment instructions
+- [Troubleshooting Guide](docs/deployment/TROUBLESHOOTING.md) - Common issues and solutions
+- [Environment Configuration](docs/deployment/ENVIRONMENT_CONFIGURATION.md) - Environment-specific settings
+
+### Architecture & Development
+- [Multi-Agent System](docs/architecture/MULTI_AGENT_SYSTEM.md) - AI agent architecture
+- [LangGraph Integration](docs/architecture/LANGGRAPH_INTEGRATION.md) - Workflow orchestration
+- [Development Guide](docs/guides/DEVELOPMENT_GUIDE.md) - Development best practices
 
 ## Development Workflow
 

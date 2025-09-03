@@ -169,8 +169,15 @@ class SupabaseAuth:
             logger.error(f"Ownership check failed: {str(e)}")
             return False
 
-# Global auth instance
-supabase_auth = SupabaseAuth()
+# Global auth instance - lazy initialization
+supabase_auth = None
+
+def get_supabase_auth():
+    """Get or create the global Supabase auth instance"""
+    global supabase_auth
+    if supabase_auth is None:
+        supabase_auth = SupabaseAuth()
+    return supabase_auth
 
 # Security scheme for FastAPI
 security = HTTPBearer()

@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: chromadb-pvc
+  namespace: goaltrajectory-ai
+  labels:
+    app: chromadb
+    component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard
+---
+# Optional: StorageClass for cloud providers
+# Uncomment and modify based on your cloud provider
+# apiVersion: storage.k8s.io/v1
+# kind: StorageClass
+# metadata:
+#   name: chromadb-ssd
+# provisioner: kubernetes.io/gce-pd  # For GKE
+# # provisioner: kubernetes.io/aws-ebs  # For EKS
+# # provisioner: disk.csi.azure.com  # For AKS
+# parameters:
+#   type: pd-ssd  # For GKE
+#   # type: gp3  # For EKS
+#   # skuName: Premium_LRS  # For AKS
+#   replication-type: none
+# allowVolumeExpansion: true
+# volumeBindingMode: WaitForFirstConsumer

@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chromadb-config
+  namespace: goaltrajectory-ai
+  labels:
+    app: chromadb
+    component: database
+data:
+  # ChromaDB Configuration
+  CHROMA_SERVER_HOST: "0.0.0.0"
+  CHROMA_SERVER_HTTP_PORT: "8000"
+  PERSIST_DIRECTORY: "/chroma/chroma"
+  CHROMA_DB_IMPL: "duckdb+parquet"
+  
+  # Logging Configuration
+  LOG_LEVEL: "INFO"
+  CHROMA_SERVER_CORS_ALLOW_ORIGINS: '["*"]'
+  
+  # Performance Configuration
+  CHROMA_SERVER_GRPC_PORT: "50051"
+  CHROMA_SEGMENT_CACHE_POLICY: "LRU"
+  
+  # Security Configuration
+  CHROMA_SERVER_AUTH_CREDENTIALS_PROVIDER: "chromadb.auth.basic.BasicAuthCredentialsProvider"
+  CHROMA_SERVER_AUTH_CREDENTIALS_FILE: "/etc/chroma/auth.txt"

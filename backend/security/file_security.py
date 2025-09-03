@@ -7,9 +7,24 @@ import tempfile
 import subprocess
 import logging
 from typing import Dict, List, Optional, Tuple
+import logging
 from pathlib import Path
-import magic
-import yara
+
+logger = logging.getLogger(__name__)
+
+try:
+    import magic
+    MAGIC_AVAILABLE = True
+except ImportError:
+    MAGIC_AVAILABLE = False
+    logger.warning("python-magic not available, file type detection will be limited")
+
+try:
+    import yara
+    YARA_AVAILABLE = True
+except ImportError:
+    YARA_AVAILABLE = False
+    logger.warning("yara-python not available, advanced malware detection disabled")
 from .input_validation import FileUploadValidator, ValidationError
 
 logger = logging.getLogger(__name__)
@@ -35,8 +50,11 @@ class VirusScanner:
         logger.warning("ClamAV not available, using alternative scanning methods")
         return False
     
-    def _load_yara_rules(self) -> Optional[yara.Rules]:
+    def _load_yara_rules(self) -> Optional:
         """Load YARA rules for malware detection"""
+        if not YARA_AVAILABLE:
+            return None
+            
         try:
             # Create basic YARA rules for common malware patterns
             rules_content = '''
@@ -81,6 +99,7 @@ class VirusScanner:
             }
             '''
             
+            import yara
             return yara.compile(source=rules_content)
             
         except Exception as e:
@@ -192,9 +211,26 @@ class VirusScanner:
             return {"clean": False, "threats": [f"YARA scan error: {str(e)}"]}
     
     async def _validate_file_type(self, file_path: str) -> Dict[str, any]:
-        """Validate file type using python-magic"""
+        """Validate file type using python-magic (if available)"""
         try:
-            # Get MIME type
+            if not MAGIC_AVAILABLE:
+                # Fallback to file extension validation
+                file_ext = Path(file_path).suffix.lower()
+                allowed_extensions = ['.pdf', '.txt', '.csv', '.json']
+                
+                if file_ext not in allowed_extensions:
+                    return {
+                        "clean": False, 
+                        "threats": [f"Disallowed file extension: {file_ext}"]
+                    }
+                
+                # For PDF files, do basic validation
+                if file_ext == '.pdf':
+                    return await self._validate_pdf_file(file_path)
+                
+                return {"clean": True, "threats": []}
+            
+            # Get MIME type using magic
             mime_type = magic.from_file(file_path, mime=True)
             
             # Allowed MIME types

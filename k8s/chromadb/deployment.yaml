@@ -1,0 +1,90 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: chromadb
+  namespace: goaltrajectory-ai
+  labels:
+    app: chromadb
+    component: database
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: chromadb
+  template:
+    metadata:
+      labels:
+        app: chromadb
+        component: database
+    spec:
+      serviceAccountName: chromadb-service-account
+      priorityClassName: goaltrajectory-ai-priority
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+      - name: chromadb
+        image: chromadb/chroma:latest
+        ports:
+        - containerPort: 8000
+          name: http
+        envFrom:
+        - configMapRef:
+            name: chromadb-config
+        env:
+        - name: CHROMA_SERVER_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: chromadb-config
+              key: CHROMA_SERVER_HOST
+        - name: CHROMA_SERVER_HTTP_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: chromadb-config
+              key: CHROMA_SERVER_HTTP_PORT
+        volumeMounts:
+        - name: chroma-data
+          mountPath: /chroma/chroma
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /api/v1/heartbeat
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /api/v1/heartbeat
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          runAsNonRoot: true
+          runAsUser: 1000
+          seccompProfile:
+            type: RuntimeDefault
+          capabilities:
+            drop:
+            - ALL
+      volumes:
+      - name: chroma-data
+        persistentVolumeClaim:
+          claimName: chromadb-pvc
+      restartPolicy: Always

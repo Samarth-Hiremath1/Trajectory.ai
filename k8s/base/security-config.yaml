@@ -1,0 +1,92 @@
+---
+# Resource Quotas for security and resource management
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: goaltrajectory-ai-quota
+  namespace: goaltrajectory-ai
+spec:
+  hard:
+    requests.cpu: "2"
+    requests.memory: 4Gi
+    limits.cpu: "4"
+    limits.memory: 8Gi
+    pods: "10"
+    persistentvolumeclaims: "5"
+    services: "10"
+    secrets: "10"
+    configmaps: "10"
+---
+# Limit Range for pod security
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: goaltrajectory-ai-limits
+  namespace: goaltrajectory-ai
+spec:
+  limits:
+  - type: Container
+    default:
+      cpu: "500m"
+      memory: "512Mi"
+    defaultRequest:
+      cpu: "100m"
+      memory: "128Mi"
+    min:
+      cpu: "50m"
+      memory: "64Mi"
+    max:
+      cpu: "1"
+      memory: "2Gi"
+  - type: Pod
+    max:
+      cpu: "2"
+      memory: "4Gi"
+---
+# Priority Class for critical workloads
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: goaltrajectory-ai-priority
+value: 1000
+globalDefault: false
+description: "Priority class for GoalTrajectory.AI application components"
+---
+# Pod Disruption Budget for Backend
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: backend-pdb
+  namespace: goaltrajectory-ai
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: goaltrajectory-ai
+      component: backend
+---
+# Pod Disruption Budget for Frontend
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: frontend-pdb
+  namespace: goaltrajectory-ai
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: goaltrajectory-ai
+      component: frontend
+---
+# Pod Disruption Budget for ChromaDB
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: chromadb-pdb
+  namespace: goaltrajectory-ai
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: chromadb
+      component: database
