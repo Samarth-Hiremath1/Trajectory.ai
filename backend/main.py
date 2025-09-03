@@ -12,12 +12,16 @@ from dotenv import load_dotenv
 import os
 from pathlib import Path
 
-# Try to load .env from current directory, then from backend directory
-env_paths = ['.env', 'backend/.env', '../.env']
-for env_path in env_paths:
-    if Path(env_path).exists():
-        load_dotenv(env_path)
-        break
+# Try to load .env files in order of priority (local overrides main)
+env_paths = [
+    ('.env.local', 'backend/.env.local', '../.env.local'),  # Local files first (highest priority)
+    ('.env', 'backend/.env', '../.env')  # Main files second
+]
+
+for env_group in env_paths:
+    for env_path in env_group:
+        if Path(env_path).exists():
+            load_dotenv(env_path, override=True)  # Allow override for local files
 
 # Import security modules
 from security.rate_limiting import get_rate_limiter, create_rate_limit_middleware
